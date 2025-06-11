@@ -9,7 +9,7 @@ interface ApiResponse<T> {
   error?: string;
 }
 
-class ApiService {
+export class ApiService {
   private baseURL: string;
   private token: string | null = null;
 
@@ -101,14 +101,10 @@ class ApiService {
     return this.request(`/Patient${queryString ? `?${queryString}` : ''}`);
   }
 
-  async getPatientById(id: string) {
-    return this.request(`/Patient/${id}`);
-  }
-
   async createPatient(patientData: any) {
     return this.request('/Patient', {
       method: 'POST',
-      body: JSON.stringify(patientData),
+      body: JSON.stringify(patientData)
     });
   }
 

@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Platform,
   ColorValue,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -68,21 +69,20 @@ const healthData: HealthDataItem[] = [
 ];
 
 export default function ObservationsScreen() {
+  const { width } = useWindowDimensions();
+
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView 
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-      >
+    <SafeAreaView style={[styles.container, { paddingHorizontal: width > 600 ? 80 : 0 }]}> 
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
         {/* Header */}
-        <View style={styles.header}>
+        <View style={[styles.header, { maxWidth: 700, alignSelf: 'center', width: '100%' }]}> 
           <Text style={styles.title}>Health Records</Text>
           <Text style={styles.subtitle}>Track your health metrics</Text>
         </View>
 
         {/* Health Data */}
-        <View style={styles.section}>
-          <View style={styles.cardList}>
+        <View style={[styles.section, { maxWidth: 700, alignSelf: 'center', width: '100%' }]}> 
+          <View style={[styles.cardList, { maxWidth: 700, alignSelf: 'center', width: '100%' }]}> 
             {healthData.map((item) => (
               <TouchableOpacity 
                 key={item.id} 

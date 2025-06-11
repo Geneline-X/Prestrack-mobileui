@@ -7,6 +7,8 @@ import {
   TouchableOpacity,
   Image,
   Switch,
+  useWindowDimensions,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -118,6 +120,7 @@ const notificationSettings = [
 ];
 
 export default function ProfileScreen() {
+  const { width } = useWindowDimensions();
   const [notifications, setNotifications] = useState({
     email: true,
     sms: true,
@@ -132,7 +135,7 @@ export default function ProfileScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { paddingHorizontal: width > 600 ? 80 : 0 }]}> 
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
@@ -143,7 +146,7 @@ export default function ProfileScreen() {
         </View>
 
         {/* Profile Card */}
-        <View style={styles.profileCard}>
+        <View style={[styles.profileCard, { maxWidth: 600, alignSelf: 'center', width: '100%' }]}> 
           <LinearGradient
             colors={['#6366F1', '#8B5CF6']}
             style={styles.profileGradient}
@@ -181,7 +184,7 @@ export default function ProfileScreen() {
         </View>
 
         {/* Stats */}
-        <View style={styles.statsContainer}>
+        <View style={[styles.statsContainer, { flexDirection: width > 600 ? 'row' : 'row', gap: width > 600 ? 24 : 16, maxWidth: 600, alignSelf: 'center', width: '100%' }]}> 
           {profileStats.map((stat) => (
             <TouchableOpacity key={stat.id} style={styles.statCard}>
               <View style={[styles.statIcon, { backgroundColor: stat.color }]}>
@@ -218,7 +221,7 @@ export default function ProfileScreen() {
         </View>
 
         {/* Menu Items */}
-        <View style={styles.menuContainer}>
+        <View style={[styles.menuContainer, { maxWidth: 600, alignSelf: 'center', width: '100%' }]}> 
           {menuItems.map((item) => (
             <TouchableOpacity key={item.id} style={styles.menuItem}>
               <View style={styles.menuItemLeft}>
@@ -239,7 +242,7 @@ export default function ProfileScreen() {
         </View>
 
         {/* Emergency Contacts */}
-        <View style={styles.emergencyContainer}>
+        <View style={[styles.emergencyContainer, { maxWidth: 600, alignSelf: 'center', width: '100%' }]}> 
           <Text style={styles.emergencyTitle}>Emergency Contacts</Text>
           {emergencyContacts.map((contact) => (
             <TouchableOpacity key={contact.id} style={styles.emergencyContact}>
@@ -278,7 +281,7 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC', // softer background
+    backgroundColor: '#F8FAFC',
   },
   header: {
     flexDirection: 'row',

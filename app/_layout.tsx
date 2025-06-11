@@ -38,7 +38,7 @@ export default function RootLayout() {
       <StatusBar style="auto" />
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="login/index" />
-        <Stack.Screen name="(patients)" />
+        <Stack.Screen name="(doctor)" />
         <Stack.Screen name="(admin)" />
         <Stack.Screen name="+not-found" />
       </Stack>

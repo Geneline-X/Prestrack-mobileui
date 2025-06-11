@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Mail, Lock, Baby } from 'lucide-react-native';
 import apiService from '../../services/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Mock hospitals in Sierra Leone
 const facilities = [
@@ -65,12 +66,14 @@ export default function LoginScreen() {
       const res = await apiService.login(username, password);
       // Type assertion for expected AuthResponse
       if ((res as any).resourceType === 'AuthResponse' && (res as any).accessToken) {
-        apiService.setAuthToken((res as any).accessToken);
+        const token = (res as any).accessToken;
+        await AsyncStorage.setItem('auth_token', token);
+        apiService.setAuthToken(token);
         const user = (res as any).user;
         if (user.role === 'super_admin' || user.role === 'facility_admin' || user.role === 'admin') {
           await router.replace('/(admin)/dashboard');
         } else {
-          await router.replace('/(patients)/dashboard');
+          await router.replace('/(doctor)/dashboard');
         }
       } else if ((res as any).resourceType === 'OperationOutcome' && Array.isArray((res as any).issue)) {
         setError((res as any).issue[0]?.diagnostics || 'Login failed');
