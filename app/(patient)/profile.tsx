@@ -5,14 +5,10 @@ import { View, StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert, Refre
 import { Text, Surface } from "react-native-paper"
 import { Stack } from "expo-router"
 import { User, Phone, Mail, MapPin, Edit3, Save, X } from "lucide-react-native"
-import { ApiService } from "../../services/api"
-import AsyncStorage from "@react-native-async-storage/async-storage"
-import LoadingSpinner from "../../components/LoadingSpinner"
-import ErrorMessage from "../../components/ErrorMessage"
-
-const apiService = new ApiService()
+import { mockPatientProfile } from "@/data/mockData"
 
 const COLORS = {
+  warning: "#F59E0B",
   primary: "#6366F1",
   primaryDark: "#4F46E5",
   secondary: "#EC4899",
@@ -27,26 +23,24 @@ const COLORS = {
 }
 
 interface PatientProfile {
-  resourceType: string
   id: string
-  name: Array<{
-    given: string[]
-    family: string
-  }>
-  gender: string
-  birthDate: string
-  telecom: Array<{
-    system: string
-    value: string
-    use: string
-  }>
-  address: Array<{
-    line: string[]
-    city: string
-    state: string
-    postalCode: string
-    country: string
-  }>
+  name: string
+  age: number
+  phone: string
+  email: string
+  address: string
+  emergencyContact: {
+    name: string
+    relationship: string
+    phone: string
+  }
+  medicalHistory: string[]
+  currentPregnancy: {
+    startDate: string
+    dueDate: string
+    weeksPregnant: number
+    riskLevel: string
+  }
 }
 
 export default function ProfileScreen() {
@@ -60,41 +54,21 @@ export default function ProfileScreen() {
   // Editable fields
   const [phone, setPhone] = useState("")
   const [email, setEmail] = useState("")
-  const [addressLine, setAddressLine] = useState("")
-  const [city, setCity] = useState("")
-  const [state, setState] = useState("")
-  const [postalCode, setPostalCode] = useState("")
-  const [country, setCountry] = useState("")
+  const [address, setAddress] = useState("")
+  const [emergencyName, setEmergencyName] = useState("")
+  const [emergencyPhone, setEmergencyPhone] = useState("")
 
   const fetchProfile = async () => {
     try {
-      const token = await AsyncStorage.getItem("auth_token")
-      if (!token) {
-        throw new Error("No authentication token found")
-      }
-
-      apiService.setAuthToken(token)
-      const response = await apiService.getPatientProfile()
-
-      if (response.error) {
-        throw new Error(response.error)
-      }
-
-      const profileData = response as PatientProfile
-      setProfile(profileData)
+      // Use mock data
+      setProfile(mockPatientProfile)
 
       // Set editable fields
-      const phoneContact = profileData.telecom?.find((t) => t.system === "phone")
-      const emailContact = profileData.telecom?.find((t) => t.system === "email")
-      const address = profileData.address?.[0]
-
-      setPhone(phoneContact?.value || "")
-      setEmail(emailContact?.value || "")
-      setAddressLine(address?.line?.[0] || "")
-      setCity(address?.city || "")
-      setState(address?.state || "")
-      setPostalCode(address?.postalCode || "")
-      setCountry(address?.country || "")
+      setPhone(mockPatientProfile.phone)
+      setEmail(mockPatientProfile.email)
+      setAddress(mockPatientProfile.address)
+      setEmergencyName(mockPatientProfile.emergencyContact.name)
+      setEmergencyPhone(mockPatientProfile.emergencyContact.phone)
 
       setError(null)
     } catch (err: any) {
@@ -109,31 +83,22 @@ export default function ProfileScreen() {
   const handleSave = async () => {
     setSaving(true)
     try {
-      const updateData = {
-        telecom: [
-          ...(phone ? [{ system: "phone", value: phone, use: "mobile" }] : []),
-          ...(email ? [{ system: "email", value: email, use: "home" }] : []),
-        ],
-        address: [
-          {
-            line: [addressLine],
-            city,
-            state,
-            postalCode,
-            country,
-          },
-        ],
+      // Simulate saving
+      const updatedProfile = {
+        ...profile!,
+        phone,
+        email,
+        address,
+        emergencyContact: {
+          ...profile!.emergencyContact,
+          name: emergencyName,
+          phone: emergencyPhone,
+        },
       }
 
-      const response = await apiService.updatePatientProfile(updateData)
-
-      if (response.error) {
-        throw new Error(response.error)
-      }
-
+      setProfile(updatedProfile)
       Alert.alert("Success", "Profile updated successfully!")
       setEditing(false)
-      fetchProfile() // Refresh data
     } catch (err: any) {
       console.error("Profile update error:", err)
       Alert.alert("Error", err.message || "Failed to update profile")
@@ -146,17 +111,11 @@ export default function ProfileScreen() {
     setEditing(false)
     // Reset fields to original values
     if (profile) {
-      const phoneContact = profile.telecom?.find((t) => t.system === "phone")
-      const emailContact = profile.telecom?.find((t) => t.system === "email")
-      const address = profile.address?.[0]
-
-      setPhone(phoneContact?.value || "")
-      setEmail(emailContact?.value || "")
-      setAddressLine(address?.line?.[0] || "")
-      setCity(address?.city || "")
-      setState(address?.state || "")
-      setPostalCode(address?.postalCode || "")
-      setCountry(address?.country || "")
+      setPhone(profile.phone)
+      setEmail(profile.email)
+      setAddress(profile.address)
+      setEmergencyName(profile.emergencyContact.name)
+      setEmergencyPhone(profile.emergencyContact.phone)
     }
   }
 
@@ -170,18 +129,41 @@ export default function ProfileScreen() {
   }
 
   if (loading) {
-    return <LoadingSpinner />
+    return (
+      <View style={[styles.container, { justifyContent: "center", alignItems: "center" }]}>
+        <User size={48} color={COLORS.primary} />
+        <Text style={{ marginTop: 16, fontSize: 16, color: COLORS.textSecondary }}>Loading...</Text>
+      </View>
+    )
   }
 
   if (error) {
-    return <ErrorMessage message={error} onRetry={fetchProfile} />
+    return (
+      <View style={[styles.container, { justifyContent: "center", alignItems: "center" }]}>
+        <Text style={{ fontSize: 16, color: COLORS.error, textAlign: "center" }}>{error}</Text>
+        <TouchableOpacity
+          onPress={fetchProfile}
+          style={{ marginTop: 16, padding: 12, backgroundColor: COLORS.primary, borderRadius: 8 }}
+        >
+          <Text style={{ color: "white" }}>Retry</Text>
+        </TouchableOpacity>
+      </View>
+    )
   }
 
   if (!profile) {
-    return <ErrorMessage message="No profile data available" onRetry={fetchProfile} />
+    return (
+      <View style={[styles.container, { justifyContent: "center", alignItems: "center" }]}>
+        <Text style={{ fontSize: 16, color: COLORS.textSecondary }}>No profile data available</Text>
+        <TouchableOpacity
+          onPress={fetchProfile}
+          style={{ marginTop: 16, padding: 12, backgroundColor: COLORS.primary, borderRadius: 8 }}
+        >
+          <Text style={{ color: "white" }}>Retry</Text>
+        </TouchableOpacity>
+      </View>
+    )
   }
-
-  const fullName = `${profile.name?.[0]?.given?.join(" ") || ""} ${profile.name?.[0]?.family || ""}`.trim()
 
   return (
     <View style={styles.container}>
@@ -217,9 +199,9 @@ export default function ProfileScreen() {
             <User size={40} color={COLORS.primary} />
           </View>
           <View style={styles.profileInfo}>
-            <Text style={styles.profileName}>{fullName}</Text>
+            <Text style={styles.profileName}>{profile.name}</Text>
             <Text style={styles.profileDetails}>
-              {profile.gender?.charAt(0).toUpperCase() + profile.gender?.slice(1)} • Born {profile.birthDate}
+              {profile.age} years old • Patient ID: {profile.id}
             </Text>
           </View>
         </Surface>
@@ -264,71 +246,89 @@ export default function ProfileScreen() {
               <Text style={styles.fieldValue}>{email || "Not provided"}</Text>
             )}
           </View>
-        </Surface>
-
-        {/* Address Information */}
-        <Surface style={styles.section}>
-          <Text style={styles.sectionTitle}>Address Information</Text>
 
           <View style={styles.fieldContainer}>
             <View style={styles.fieldHeader}>
               <MapPin size={20} color={COLORS.textSecondary} />
-              <Text style={styles.fieldLabel}>Street Address</Text>
+              <Text style={styles.fieldLabel}>Address</Text>
             </View>
             {editing ? (
               <TextInput
                 style={styles.input}
-                value={addressLine}
-                onChangeText={setAddressLine}
-                placeholder="Enter street address"
+                value={address}
+                onChangeText={setAddress}
+                placeholder="Enter address"
+                multiline
               />
             ) : (
-              <Text style={styles.fieldValue}>{addressLine || "Not provided"}</Text>
+              <Text style={styles.fieldValue}>{address || "Not provided"}</Text>
+            )}
+          </View>
+        </Surface>
+
+        {/* Emergency Contact */}
+        <Surface style={styles.section}>
+          <Text style={styles.sectionTitle}>Emergency Contact</Text>
+
+          <View style={styles.fieldContainer}>
+            <Text style={styles.fieldLabel}>Name</Text>
+            {editing ? (
+              <TextInput
+                style={styles.input}
+                value={emergencyName}
+                onChangeText={setEmergencyName}
+                placeholder="Emergency contact name"
+              />
+            ) : (
+              <Text style={styles.fieldValue}>{emergencyName || "Not provided"}</Text>
             )}
           </View>
 
-          <View style={styles.row}>
-            <View style={[styles.fieldContainer, { flex: 1, marginRight: 8 }]}>
-              <Text style={styles.fieldLabel}>City</Text>
-              {editing ? (
-                <TextInput style={styles.input} value={city} onChangeText={setCity} placeholder="City" />
-              ) : (
-                <Text style={styles.fieldValue}>{city || "Not provided"}</Text>
-              )}
-            </View>
-
-            <View style={[styles.fieldContainer, { flex: 1, marginLeft: 8 }]}>
-              <Text style={styles.fieldLabel}>State</Text>
-              {editing ? (
-                <TextInput style={styles.input} value={state} onChangeText={setState} placeholder="State" />
-              ) : (
-                <Text style={styles.fieldValue}>{state || "Not provided"}</Text>
-              )}
-            </View>
+          <View style={styles.fieldContainer}>
+            <Text style={styles.fieldLabel}>Relationship</Text>
+            <Text style={styles.fieldValue}>{profile.emergencyContact.relationship}</Text>
           </View>
 
-          <View style={styles.row}>
-            <View style={[styles.fieldContainer, { flex: 1, marginRight: 8 }]}>
-              <Text style={styles.fieldLabel}>Postal Code</Text>
-              {editing ? (
-                <TextInput
-                  style={styles.input}
-                  value={postalCode}
-                  onChangeText={setPostalCode}
-                  placeholder="Postal Code"
-                />
-              ) : (
-                <Text style={styles.fieldValue}>{postalCode || "Not provided"}</Text>
-              )}
-            </View>
+          <View style={styles.fieldContainer}>
+            <Text style={styles.fieldLabel}>Phone</Text>
+            {editing ? (
+              <TextInput
+                style={styles.input}
+                value={emergencyPhone}
+                onChangeText={setEmergencyPhone}
+                placeholder="Emergency contact phone"
+                keyboardType="phone-pad"
+              />
+            ) : (
+              <Text style={styles.fieldValue}>{emergencyPhone || "Not provided"}</Text>
+            )}
+          </View>
+        </Surface>
 
-            <View style={[styles.fieldContainer, { flex: 1, marginLeft: 8 }]}>
-              <Text style={styles.fieldLabel}>Country</Text>
-              {editing ? (
-                <TextInput style={styles.input} value={country} onChangeText={setCountry} placeholder="Country" />
-              ) : (
-                <Text style={styles.fieldValue}>{country || "Not provided"}</Text>
-              )}
+        {/* Current Pregnancy */}
+        <Surface style={styles.section}>
+          <Text style={styles.sectionTitle}>Current Pregnancy</Text>
+
+          <View style={styles.pregnancyInfo}>
+            <Text style={styles.pregnancyWeeks}>{profile.currentPregnancy.weeksPregnant} weeks</Text>
+            <Text style={styles.pregnancyLabel}>Weeks Pregnant</Text>
+          </View>
+
+          <View style={styles.pregnancyDetails}>
+            <View style={styles.pregnancyDetail}>
+              <Text style={styles.detailLabel}>Due Date</Text>
+              <Text style={styles.detailValue}>{profile.currentPregnancy.dueDate}</Text>
+            </View>
+            <View style={styles.pregnancyDetail}>
+              <Text style={styles.detailLabel}>Risk Level</Text>
+              <Text
+                style={[
+                  styles.detailValue,
+                  { color: profile.currentPregnancy.riskLevel === "low" ? COLORS.success : COLORS.warning },
+                ]}
+              >
+                {profile.currentPregnancy.riskLevel.toUpperCase()}
+              </Text>
             </View>
           </View>
         </Surface>
@@ -463,5 +463,41 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: COLORS.surface,
     marginLeft: 8,
+  },
+  pregnancyInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  pregnancyWeeks: {
+    fontSize: 24,
+    fontWeight: "bold",
+    color: COLORS.primary,
+    marginRight: 8,
+  },
+  pregnancyLabel: {
+    fontSize: 16,
+    color: COLORS.textSecondary,
+  },
+  pregnancyDetails: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  pregnancyDetail: {
+    flex: 1,
+    marginRight: 16,
+  },
+  detailLabel: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    marginBottom: 4,
+  },
+  detailValue: {
+    fontSize: 16,
+    color: COLORS.text,
+    fontWeight: "bold",
+  },
+  warning: {
+    color: COLORS.error,
   },
 })

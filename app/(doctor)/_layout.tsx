@@ -1,85 +1,112 @@
-import React from 'react';
-import { View, StyleSheet, TouchableOpacity, Text, useWindowDimensions } from 'react-native';
-import { Slot, usePathname, useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { LayoutDashboard, FileText, Calendar, Users, Settings, BarChart2 } from 'lucide-react-native';
+import { Tabs } from "expo-router"
+import { Home, Users, Calendar, User, Brain } from "lucide-react-native"
 
-export default function PatientLayout() {
-  const pathname = usePathname();
-  const router = useRouter();
-  const { width } = useWindowDimensions();
-
-  const getTabColor = (path: string) => {
-    return pathname.includes(path) ? '#0EA5E9' : '#94A3B8';
-  };
-
+export default function DoctorLayout() {
   return (
-    <View style={[styles.container, { alignItems: 'center' }]}>
-      <View style={[styles.content, { paddingHorizontal: width > 600 ? 80 : 0, maxWidth: 700, width: '100%' }]}>
-        <Slot />
-      </View>
-      <SafeAreaView edges={['bottom']} style={styles.tabBarContainer}>
-        <View style={[styles.tabBar, { paddingHorizontal: width > 600 ? 80 : 16, maxWidth: 700, width: '100%', alignSelf: 'center' }]}>
-          <TouchableOpacity style={styles.tab} onPress={() => router.replace('/(doctor)/dashboard')}>
-            <LayoutDashboard size={24} color={getTabColor('dashboard')} strokeWidth={2} />
-            <Text style={styles.tabLabel}>Home</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.tab} onPress={() => router.replace('/(doctor)/patients')}>
-            <Users size={24} color={getTabColor('patients')} strokeWidth={2} />
-            <Text style={styles.tabLabel}>Patients</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.tab} onPress={() => router.replace('/(doctor)/analytics')}>
-            <BarChart2 size={24} color={getTabColor('analytics')} strokeWidth={2} />
-            <Text style={styles.tabLabel}>Analytics</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.tab} onPress={() => router.replace('/(doctor)/appointments')}>
-            <Calendar size={24} color={getTabColor('appointments')} strokeWidth={2} />
-            <Text style={styles.tabLabel}>Schedule</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.tab} onPress={() => router.replace('/(doctor)/visits')}>
-            <Calendar size={24} color={getTabColor('visits')} strokeWidth={2} />
-            <Text style={styles.tabLabel}>Visits</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.tab} onPress={() => router.replace('/(doctor)/profile')}>
-            <Settings size={24} color={getTabColor('profile')} strokeWidth={2} />
-            <Text style={styles.tabLabel}>Settings</Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
-    </View>
-  );
-}
+    <Tabs
+      screenOptions={{
+        tabBarActiveTintColor: "#6366F1",
+        tabBarInactiveTintColor: "#6B7280",
+        tabBarStyle: {
+          backgroundColor: "#FFFFFF",
+          borderTopWidth: 1,
+          borderTopColor: "#E5E7EB",
+          paddingBottom: 8,
+          paddingTop: 8,
+          height: 80,
+        },
+        tabBarLabelStyle: {
+          fontSize: 12,
+          fontWeight: "500",
+        },
+        headerShown: false,
+      }}
+    >
+      <Tabs.Screen
+        name="dashboard"
+        options={{
+          title: "Dashboard",
+          tabBarIcon: ({ color, size }) => <Home size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="patients"
+        options={{
+          title: "Patients",
+          tabBarIcon: ({ color, size }) => <Users size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="appointments"
+        options={{
+          title: "Visits",
+          tabBarIcon: ({ color, size }) => <Calendar size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="ai-chat"
+        options={{
+          title: "AI Assistant",
+          tabBarIcon: ({ color, size }) => <Brain size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: "Profile",
+          tabBarIcon: ({ color, size }) => <User size={size} color={color} />,
+        }}
+      />
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
-  content: {
-    flex: 1,
-  },
-  tabBarContainer: {
-    backgroundColor: '#FFFFFF',
-    borderTopWidth: 1,
-    borderTopColor: '#F1F5F9',
-  },
-  tabBar: {
-    flexDirection: 'row',
-    height: 64,
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    paddingHorizontal: 16, // will be overridden by responsive logic
-  },
-  tab: {
-    width: 56,
-    height: 56,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  tabLabel: {
-    fontSize: 11,
-    color: '#64748B',
-    fontFamily: 'Inter-Medium',
-    marginTop: 2,
-  },
-});
+      {/* Hidden screens */}
+      <Tabs.Screen
+        name="create-patient"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="create-pregnancy"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="visits"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="observations"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="analytics"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="notifications"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="export"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="patient-detail"
+        options={{
+          href: null,
+        }}
+      />
+    </Tabs>
+  )
+}

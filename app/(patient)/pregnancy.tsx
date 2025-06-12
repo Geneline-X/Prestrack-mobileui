@@ -3,15 +3,10 @@
 import { useState, useEffect } from "react"
 import { View, StyleSheet, ScrollView, TouchableOpacity, Alert, RefreshControl, TextInput } from "react-native"
 import { Text, Surface } from "react-native-paper"
-import { Stack, useRouter } from "expo-router"
+import { Stack } from "expo-router"
 import { Baby, Calendar, Plus, Heart, Weight } from "lucide-react-native"
 import { format, differenceInWeeks, parseISO } from "date-fns"
-import { ApiService } from "../../services/api"
-import AsyncStorage from "@react-native-async-storage/async-storage"
-import LoadingSpinner from "../../components/LoadingSpinner"
-import ErrorMessage from "../../components/ErrorMessage"
-
-const apiService = new ApiService()
+import { mockPatientProfile } from "@/data/mockData"
 
 const COLORS = {
   primary: "#6366F1",
@@ -29,12 +24,8 @@ const COLORS = {
 }
 
 interface PregnancyData {
-  resourceType: string
   id: string
   status: string
-  patient: {
-    reference: string
-  }
   startDate: string
   expectedDeliveryDate: string
   lastMenstrualPeriod: string
@@ -71,44 +62,45 @@ export default function PregnancyScreen() {
     notes: "",
   })
 
-  const router = useRouter()
-
   const fetchPregnancyData = async () => {
     try {
-      setLoading(true)
+      // Use mock data
+      const mockPregnancyData: PregnancyData = {
+        id: "1",
+        status: "active",
+        startDate: mockPatientProfile.currentPregnancy.startDate,
+        expectedDeliveryDate: mockPatientProfile.currentPregnancy.dueDate,
+        lastMenstrualPeriod: mockPatientProfile.currentPregnancy.startDate,
+        prenatalVisits: [
+          {
+            date: "2024-05-15",
+            gestationalAge: "20 weeks",
+            weight: 65.5,
+            bloodPressure: "118/75",
+            notes: "Normal development, baby is healthy",
+          },
+          {
+            date: "2024-06-01",
+            gestationalAge: "22 weeks",
+            weight: 67.2,
+            bloodPressure: "120/78",
+            notes: "Ultrasound shows good growth",
+          },
+          {
+            date: "2024-06-15",
+            gestationalAge: "24 weeks",
+            weight: 68.5,
+            bloodPressure: "122/80",
+            notes: "All vitals normal, feeling good",
+          },
+        ],
+      }
+
+      setPregnancyData(mockPregnancyData)
       setError(null)
-
-      const token = await AsyncStorage.getItem("auth_token")
-      if (!token) {
-        console.log("No auth token found, redirecting to login")
-        router.replace("/login")
-        return
-      }
-
-      apiService.setAuthToken(token)
-      const response = await apiService.getCurrentPregnancy()
-
-      if (response.error) {
-        throw new Error(response.error)
-      }
-
-      setPregnancyData(response as PregnancyData)
-    } catch (error) {
-      console.error("Error fetching pregnancy data:", error)
-
-      // Handle authentication errors
-      if (error instanceof Error) {
-        if (error.message.includes("401") || error.message.includes("token") || error.message.includes("auth")) {
-          console.log("Authentication error, redirecting to login")
-          await AsyncStorage.removeItem("auth_token")
-          await AsyncStorage.removeItem("refresh_token")
-          router.replace("/login")
-          return
-        }
-        setError(error.message)
-      } else {
-        setError("Failed to load pregnancy data")
-      }
+    } catch (err: any) {
+      console.error("Pregnancy fetch error:", err)
+      setError(err.message || "Failed to load pregnancy data")
     } finally {
       setLoading(false)
       setRefreshing(false)
@@ -123,6 +115,7 @@ export default function PregnancyScreen() {
 
     setAddingVisit(true)
     try {
+      // Simulate adding visit
       const visitData = {
         date: newVisit.date,
         gestationalAge: newVisit.gestationalAge,
@@ -131,10 +124,12 @@ export default function PregnancyScreen() {
         notes: newVisit.notes,
       }
 
-      const response = await apiService.addPrenatalVisit(visitData)
-
-      if (response.error) {
-        throw new Error(response.error)
+      // Add to existing visits
+      if (pregnancyData) {
+        setPregnancyData({
+          ...pregnancyData,
+          prenatalVisits: [...pregnancyData.prenatalVisits, visitData],
+        })
       }
 
       Alert.alert("Success", "Prenatal visit added successfully!")
@@ -146,7 +141,6 @@ export default function PregnancyScreen() {
         bloodPressure: "",
         notes: "",
       })
-      fetchPregnancyData() // Refresh data
     } catch (err: any) {
       console.error("Add visit error:", err)
       Alert.alert("Error", err.message || "Failed to add prenatal visit")
@@ -165,15 +159,40 @@ export default function PregnancyScreen() {
   }
 
   if (loading) {
-    return <LoadingSpinner />
+    return (
+      <View style={[styles.container, { justifyContent: "center", alignItems: "center" }]}>
+        <Baby size={48} color={COLORS.secondary} />
+        <Text style={{ marginTop: 16, fontSize: 16, color: COLORS.textSecondary }}>Loading...</Text>
+      </View>
+    )
   }
 
   if (error) {
-    return <ErrorMessage message={error} onRetry={fetchPregnancyData} />
+    return (
+      <View style={[styles.container, { justifyContent: "center", alignItems: "center" }]}>
+        <Text style={{ fontSize: 16, color: COLORS.error, textAlign: "center" }}>{error}</Text>
+        <TouchableOpacity
+          onPress={fetchPregnancyData}
+          style={{ marginTop: 16, padding: 12, backgroundColor: COLORS.primary, borderRadius: 8 }}
+        >
+          <Text style={{ color: "white" }}>Retry</Text>
+        </TouchableOpacity>
+      </View>
+    )
   }
 
   if (!pregnancyData) {
-    return <ErrorMessage message="No pregnancy data available" onRetry={fetchPregnancyData} />
+    return (
+      <View style={[styles.container, { justifyContent: "center", alignItems: "center" }]}>
+        <Text style={{ fontSize: 16, color: COLORS.textSecondary }}>No pregnancy data available</Text>
+        <TouchableOpacity
+          onPress={fetchPregnancyData}
+          style={{ marginTop: 16, padding: 12, backgroundColor: COLORS.primary, borderRadius: 8 }}
+        >
+          <Text style={{ color: "white" }}>Retry</Text>
+        </TouchableOpacity>
+      </View>
+    )
   }
 
   const weeksPregnant = differenceInWeeks(new Date(), parseISO(pregnancyData.startDate))

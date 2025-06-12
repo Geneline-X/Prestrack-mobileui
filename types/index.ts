@@ -1,3 +1,74 @@
+// Notification Types
+export type NotificationType = "referral" | "appointment" | "education" | "reminder" | "alert"
+
+export type PriorityLevel = "low" | "medium" | "high"
+
+export interface AppNotification {
+  id: string
+  type: NotificationType
+  title: string
+  message: string
+  date: string
+  read: boolean
+  priority: PriorityLevel
+  patientId?: string
+}
+
+// Patient Profile Types
+export interface EmergencyContact {
+  name: string
+  relationship: string
+  phone: string
+}
+
+export interface CurrentPregnancy {
+  startDate: string
+  dueDate: string
+  weeksPregnant: number
+  riskLevel: string
+}
+
+export interface PatientProfile {
+  id: string
+  name: string
+  age: number
+  phone: string
+  email: string
+  address: string
+  emergencyContact: EmergencyContact
+  medicalHistory: string[]
+  currentPregnancy: CurrentPregnancy
+}
+
+// Pregnancy Types
+export interface PrenatalVisit {
+  date: string
+  gestationalAge: string
+  weight: number
+  bloodPressure: string
+  notes: string
+}
+
+export interface PregnancyData {
+  id: string
+  status: string
+  startDate: string
+  expectedDeliveryDate: string
+  lastMenstrualPeriod: string
+  prenatalVisits: PrenatalVisit[]
+}
+
+// Health Records Types
+export interface Observation {
+  id: string
+  type: string
+  value: string | number
+  unit: string
+  date: string
+  notes?: string
+  patientId: string
+}
+
 // FHIR and Application Types
 
 export interface User {

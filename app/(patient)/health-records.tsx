@@ -1,17 +1,12 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect } from "react"
 import { View, StyleSheet, ScrollView, TouchableOpacity, RefreshControl } from "react-native"
 import { Text, Surface } from "react-native-paper"
-import { Stack, useRouter } from "expo-router"
+import { Stack } from "expo-router"
 import { Activity, Heart, Weight, Thermometer, TrendingUp, Calendar } from "lucide-react-native"
 import { format, parseISO } from "date-fns"
-import { ApiService } from "../../services/api"
-import AsyncStorage from "@react-native-async-storage/async-storage"
-import LoadingSpinner from "../../components/LoadingSpinner"
-import ErrorMessage from "../../components/ErrorMessage"
-
-const apiService = new ApiService()
+import { mockObservations } from "@/data/mockData"
 
 const COLORS = {
   primary: "#6366F1",
@@ -29,50 +24,13 @@ const COLORS = {
 }
 
 interface Observation {
-  resourceType: string
   id: string
-  status: string
-  code: {
-    coding: Array<{
-      system: string
-      code: string
-      display: string
-    }>
-  }
-  subject: {
-    reference: string
-  }
-  effectiveDateTime: string
-  valueQuantity?: {
-    value: number
-    unit: string
-    system: string
-    code: string
-  }
-  component?: Array<{
-    code: {
-      coding: Array<{
-        system: string
-        code: string
-        display: string
-      }>
-    }
-    valueQuantity: {
-      value: number
-      unit: string
-      system: string
-      code: string
-    }
-  }>
-}
-
-interface ObservationsBundle {
-  resourceType: string
+  patientId: string
   type: string
-  total: number
-  entry: Array<{
-    resource: Observation
-  }>
+  value: string
+  unit: string
+  date: string
+  status: string
 }
 
 const observationTypes = [
@@ -82,123 +40,242 @@ const observationTypes = [
   { key: "temperature", label: "Temperature", icon: Thermometer, color: COLORS.warning },
 ]
 
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+    padding: 16,
+  },
+  scrollContainer: {
+    flex: 1,
+  },
+  contentContainer: {
+    flexGrow: 1,
+  },
+  filterContainer: {
+    flexDirection: "row",
+    marginBottom: 16,
+  },
+  filterTabs: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  filterTab: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 8,
+    borderRadius: 8,
+    marginRight: 8,
+  },
+  filterTabText: {
+    marginLeft: 8,
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  summaryCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 16,
+  },
+  summaryHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  summaryTitle: {
+    marginLeft: 8,
+    fontSize: 18,
+    fontWeight: "600",
+    color: COLORS.primaryDark,
+  },
+  summaryStats: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  summaryItem: {
+    alignItems: "center",
+  },
+  summaryValue: {
+    fontSize: 24,
+    fontWeight: "600",
+    color: COLORS.primaryDark,
+  },
+  summaryLabel: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+  },
+  observationsContainer: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 8,
+    padding: 16,
+  },
+  observationsHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  observationsTitle: {
+    marginLeft: 8,
+    fontSize: 18,
+    fontWeight: "600",
+    color: COLORS.accent,
+  },
+  observationItem: {
+    marginBottom: 16,
+  },
+  observationContent: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  observationLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  observationIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  observationInfo: {
+    marginLeft: 8,
+  },
+  observationTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: COLORS.primaryDark,
+  },
+  observationMeta: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 4,
+  },
+  observationDate: {
+    marginLeft: 8,
+    fontSize: 12,
+    color: COLORS.textSecondary,
+  },
+  observationRight: {
+    alignItems: "flex-end",
+  },
+  observationValue: {
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  observationStatus: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    marginTop: 4,
+  },
+  observationDivider: {
+    height: 1,
+    backgroundColor: COLORS.divider,
+    width: "100%",
+  },
+  emptyState: {
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 16,
+  },
+  emptyStateText: {
+    fontSize: 16,
+    color: COLORS.textSecondary,
+    marginTop: 16,
+  },
+  emptyStateSubtext: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    marginTop: 8,
+    textAlign: "center",
+  },
+})
+
 export default function HealthRecordsScreen() {
   const [observations, setObservations] = useState<Observation[]>([])
-  const [selectedType, setSelectedType] = useState<string>("all")
+  const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
-  const router = useRouter()
   const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
+  const [selectedType, setSelectedType] = useState("all")
 
-  const fetchObservations = useCallback(async () => {
+  const fetchObservations = async (type?: string) => {
     try {
-      setLoading(true)
+      // Use mock data filtered by patient ID and type
+      let filteredObs = mockObservations.filter((obs) => obs.patientId === "1")
+
+      if (type && type !== "all") {
+        filteredObs = filteredObs.filter((obs) => obs.type === type)
+      }
+
+      setObservations(filteredObs)
       setError(null)
-
-      const token = await AsyncStorage.getItem("auth_token")
-      if (!token) {
-        console.log("No auth token found, redirecting to login")
-        router.replace("/login")
-        return
-      }
-
-      apiService.setAuthToken(token)
-      const params: Record<string, string> = {}
-      if (selectedType !== "all") {
-        params.type = selectedType
-      }
-      const response = await apiService.getObservations(params)
-
-      if (response.error) {
-        throw new Error(response.error)
-      }
-
-      const bundle = response as ObservationsBundle
-      setObservations(bundle.entry?.map((entry) => entry.resource) || [])
-    } catch (error) {
-      console.error("Error fetching observations:", error)
-      
-      // Handle authentication errors
-      if (error instanceof Error) {
-        if (error.message.includes("401") || error.message.includes("token") || error.message.includes("auth")) {
-          console.log("Authentication error, redirecting to login")
-          await AsyncStorage.removeItem("auth_token")
-          await AsyncStorage.removeItem("refresh_token")
-          router.replace("/login")
-          return
-        }
-        setError(error.message)
-      } else {
-        setError("Failed to load health records")
-      }
+    } catch (err: any) {
+      console.error("Observations fetch error:", err)
+      setError(err.message || "Failed to load health records")
     } finally {
       setLoading(false)
       setRefreshing(false)
     }
-  }, [selectedType, router])
-
-  const handleTypeSelect = (type: string) => {
-    setSelectedType(type)
   }
 
   useEffect(() => {
-    fetchObservations()
+    fetchObservations(selectedType)
   }, [selectedType])
 
   const onRefresh = () => {
     setRefreshing(true)
-    // The fetchObservations function will be called when refreshing changes
-  }
-  
-  // Fetch data when refreshing changes
-  useEffect(() => {
-    if (refreshing) {
-      fetchObservations()
-    }
-  }, [refreshing, fetchObservations])
-
-  const getObservationIcon = (observation: Observation) => {
-    const display = observation.code.coding[0]?.display?.toLowerCase() || ""
-    if (display.includes("blood pressure")) return Heart
-    if (display.includes("weight")) return Weight
-    if (display.includes("temperature")) return Thermometer
-    return Activity
+    fetchObservations(selectedType)
   }
 
-  const getObservationColor = (observation: Observation) => {
-    const display = observation.code.coding[0]?.display?.toLowerCase() || ""
-    if (display.includes("blood pressure")) return COLORS.error
-    if (display.includes("weight")) return COLORS.accent
-    if (display.includes("temperature")) return COLORS.warning
-    return COLORS.primary
+  const getObservationIcon = (type: string) => {
+    switch (type) {
+      case "blood-pressure":
+        return Heart
+      case "weight":
+        return Weight
+      case "temperature":
+        return Thermometer
+      default:
+        return Activity
+    }
   }
 
-  const formatObservationValue = (observation: Observation) => {
-    if (observation.component && observation.component.length > 0) {
-      // For blood pressure with systolic/diastolic components
-      const systolic = observation.component.find((c) => c.code.coding[0]?.display?.toLowerCase().includes("systolic"))
-      const diastolic = observation.component.find((c) =>
-        c.code.coding[0]?.display?.toLowerCase().includes("diastolic"),
-      )
-
-      if (systolic && diastolic) {
-        return `${systolic.valueQuantity.value}/${diastolic.valueQuantity.value} ${systolic.valueQuantity.unit}`
-      }
+  const getObservationColor = (type: string) => {
+    switch (type) {
+      case "blood-pressure":
+        return COLORS.error
+      case "weight":
+        return COLORS.accent
+      case "temperature":
+        return COLORS.warning
+      default:
+        return COLORS.primary
     }
-
-    if (observation.valueQuantity) {
-      return `${observation.valueQuantity.value} ${observation.valueQuantity.unit}`
-    }
-
-    return "N/A"
   }
 
   if (loading) {
-    return <LoadingSpinner />
+    return (
+      <View style={[styles.container, { justifyContent: "center", alignItems: "center" }]}>
+        <Activity size={48} color={COLORS.primary} />
+        <Text style={{ marginTop: 16, fontSize: 16, color: COLORS.textSecondary }}>Loading...</Text>
+      </View>
+    )
   }
 
   if (error) {
-    return <ErrorMessage message={error} onRetry={fetchObservations} />
+    return (
+      <View style={[styles.container, { justifyContent: "center", alignItems: "center" }]}>
+        <Text style={{ fontSize: 16, color: COLORS.error, textAlign: "center" }}>{error}</Text>
+        <TouchableOpacity
+          onPress={() => fetchObservations(selectedType)}
+          style={{ marginTop: 16, padding: 12, backgroundColor: COLORS.primary, borderRadius: 8 }}
+        >
+          <Text style={{ color: "white" }}>Retry</Text>
+        </TouchableOpacity>
+      </View>
+    )
   }
 
   return (
@@ -269,9 +346,8 @@ export default function HealthRecordsScreen() {
             <View style={styles.summaryItem}>
               <Text style={styles.summaryValue}>
                 {
-                  observations.filter(
-                    (obs) => new Date(obs.effectiveDateTime) >= new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
-                  ).length
+                  observations.filter((obs) => new Date(obs.date) >= new Date(Date.now() - 7 * 24 * 60 * 60 * 1000))
+                    .length
                 }
               </Text>
               <Text style={styles.summaryLabel}>This Week</Text>
@@ -288,9 +364,8 @@ export default function HealthRecordsScreen() {
 
           {observations.length > 0 ? (
             observations.map((observation, index) => {
-              const IconComponent = getObservationIcon(observation)
-              const iconColor = getObservationColor(observation)
-              const value = formatObservationValue(observation)
+              const IconComponent = getObservationIcon(observation.type)
+              const iconColor = getObservationColor(observation.type)
 
               return (
                 <View key={observation.id} style={styles.observationItem}>
@@ -301,18 +376,20 @@ export default function HealthRecordsScreen() {
                       </View>
                       <View style={styles.observationInfo}>
                         <Text style={styles.observationTitle}>
-                          {observation.code.coding[0]?.display || "Health Observation"}
+                          {observation.type.replace("-", " ").replace(/\b\w/g, (l) => l.toUpperCase())}
                         </Text>
                         <View style={styles.observationMeta}>
                           <Calendar size={14} color={COLORS.textSecondary} />
                           <Text style={styles.observationDate}>
-                            {format(parseISO(observation.effectiveDateTime), "MMM d, yyyy • h:mm a")}
+                            {format(parseISO(observation.date), "MMM d, yyyy • h:mm a")}
                           </Text>
                         </View>
                       </View>
                     </View>
                     <View style={styles.observationRight}>
-                      <Text style={[styles.observationValue, { color: iconColor }]}>{value}</Text>
+                      <Text style={[styles.observationValue, { color: iconColor }]}>
+                        {observation.value} {observation.unit}
+                      </Text>
                       <Text style={styles.observationStatus}>
                         {observation.status.charAt(0).toUpperCase() + observation.status.slice(1)}
                       </Text>
@@ -336,169 +413,3 @@ export default function HealthRecordsScreen() {
     </View>
   )
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  scrollContainer: {
-    flex: 1,
-  },
-  contentContainer: {
-    padding: 16,
-    paddingBottom: 32,
-  },
-  filterContainer: {
-    marginBottom: 16,
-  },
-  filterTabs: {
-    flexDirection: "row",
-    gap: 12,
-    paddingHorizontal: 4,
-  },
-  filterTab: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.divider,
-    gap: 8,
-  },
-  filterTabText: {
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  summaryCard: {
-    padding: 20,
-    borderRadius: 16,
-    marginBottom: 16,
-    elevation: 2,
-    shadowColor: COLORS.primary,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
-  summaryHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  summaryTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: COLORS.text,
-    marginLeft: 12,
-  },
-  summaryStats: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-  },
-  summaryItem: {
-    alignItems: "center",
-  },
-  summaryValue: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: COLORS.primary,
-    marginBottom: 4,
-  },
-  summaryLabel: {
-    fontSize: 14,
-    color: COLORS.textSecondary,
-  },
-  observationsContainer: {
-    padding: 20,
-    borderRadius: 16,
-    elevation: 2,
-    shadowColor: COLORS.accent,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
-  observationsHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 20,
-  },
-  observationsTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: COLORS.text,
-    marginLeft: 12,
-  },
-  observationItem: {
-    marginBottom: 16,
-  },
-  observationContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  observationLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    flex: 1,
-  },
-  observationIcon: {
-    padding: 10,
-    borderRadius: 10,
-    marginRight: 12,
-  },
-  observationInfo: {
-    flex: 1,
-  },
-  observationTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: COLORS.text,
-    marginBottom: 4,
-  },
-  observationMeta: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  observationDate: {
-    fontSize: 13,
-    color: COLORS.textSecondary,
-  },
-  observationRight: {
-    alignItems: "flex-end",
-  },
-  observationValue: {
-    fontSize: 18,
-    fontWeight: "700",
-    marginBottom: 2,
-  },
-  observationStatus: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-    textTransform: "capitalize",
-  },
-  observationDivider: {
-    height: 1,
-    backgroundColor: COLORS.divider,
-    marginTop: 16,
-  },
-  emptyState: {
-    alignItems: "center",
-    paddingVertical: 40,
-  },
-  emptyStateText: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: COLORS.textSecondary,
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  emptyStateSubtext: {
-    fontSize: 14,
-    color: COLORS.textSecondary,
-    textAlign: "center",
-    lineHeight: 20,
-  },
-})
