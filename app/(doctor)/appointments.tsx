@@ -9,47 +9,14 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Calendar, Clock, MapPin, Baby } from 'lucide-react-native';
 
-const appointments = [
-  {
-    id: 1,
-    date: 'March 15, 2024',
-    time: '09:30 AM',
-    doctor: 'Dr. Sarah Wilson',
-    type: 'Prenatal Checkup',
-    location: 'Maternal Care Center',
-    description: 'Regular pregnancy checkup and ultrasound',
-    status: 'upcoming',
-  },
-  {
-    id: 2,
-    date: 'March 22, 2024',
-    time: '02:00 PM',
-    doctor: 'Dr. Emily Parker',
-    type: 'Nutrition Consultation',
-    location: 'Womens Health Clinic',
-    description: 'Pregnancy diet and supplements review',
-    status: 'upcoming',
-  },
-  {
-    id: 3,
-    date: 'March 28, 2024',
-    time: '11:15 AM',
-    doctor: 'Dr. Michael Brown',
-    type: 'Fetal Assessment',
-    location: 'Maternal Care Center',
-    description: 'Detailed ultrasound and growth monitoring',
-    status: 'upcoming',
-  },
-];
-
-export default function AppointmentsScreen() {
+export default function VisitsScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
           <View>
-            <Text style={styles.title}>Appointments</Text>
+            <Text style={styles.title}>Visits</Text>
             <Text style={styles.subtitle}>Week 24 of Pregnancy</Text>
           </View>
           <TouchableOpacity style={styles.addButton}>
@@ -57,52 +24,16 @@ export default function AppointmentsScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Appointments List */}
-        <View style={styles.appointmentsList}>
-          {appointments.map((appointment) => (
-            <TouchableOpacity
-              key={appointment.id}
-              style={styles.appointmentCard}
-              activeOpacity={0.7}
-            >
-              <View style={styles.appointmentHeader}>
-                <View style={styles.dateContainer}>
-                  <Calendar size={16} color="#64748B" strokeWidth={2} />
-                  <Text style={styles.dateText}>{appointment.date}</Text>
-                </View>
-                <View style={styles.statusContainer}>
-                  <Baby size={16} color="#0EA5E9" strokeWidth={2} />
-                  <Text style={styles.statusText}>Prenatal Care</Text>
-                </View>
-              </View>
-
-              <View style={styles.appointmentContent}>
-                <Text style={styles.appointmentType}>{appointment.type}</Text>
-                <Text style={styles.doctorName}>{appointment.doctor}</Text>
-                <Text style={styles.appointmentDescription}>
-                  {appointment.description}
-                </Text>
-
-                <View style={styles.appointmentDetails}>
-                  <View style={styles.detailItem}>
-                    <Clock size={16} color="#64748B" strokeWidth={2} />
-                    <Text style={styles.detailText}>{appointment.time}</Text>
-                  </View>
-                  <View style={styles.detailItem}>
-                    <MapPin size={16} color="#64748B" strokeWidth={2} />
-                    <Text style={styles.detailText}>{appointment.location}</Text>
-                  </View>
-                </View>
-              </View>
-            </TouchableOpacity>
-          ))}
+        {/* Visits List - To be populated dynamically */}
+        <View style={styles.visitsList}>
+          {/* Map through visits data and render each visit item here */}
         </View>
 
         {/* Care Team Note */}
         <View style={styles.careTeamNote}>
           <Text style={styles.noteTitle}>Your Care Team</Text>
           <Text style={styles.noteText}>
-            Your appointments are coordinated with your maternal healthcare team for comprehensive prenatal care.
+            Your visits are coordinated with your maternal healthcare team for comprehensive prenatal care.
           </Text>
         </View>
       </ScrollView>
@@ -157,11 +88,11 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontFamily: 'Inter-Medium',
   },
-  appointmentsList: {
+  visitsList: {
     paddingHorizontal: 28,
     gap: 20,
   },
-  appointmentCard: {
+  visitCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 20,
     padding: 20,
@@ -173,7 +104,7 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 2,
   },
-  appointmentHeader: {
+  visitHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -203,10 +134,10 @@ const styles = StyleSheet.create({
     color: '#6366F1',
     fontFamily: 'Inter-Medium',
   },
-  appointmentContent: {
+  visitContent: {
     gap: 10,
   },
-  appointmentType: {
+  visitType: {
     fontSize: 18,
     color: '#0F172A',
     fontFamily: 'Inter-SemiBold',
@@ -216,13 +147,13 @@ const styles = StyleSheet.create({
     color: '#64748B',
     fontFamily: 'Inter-Regular',
   },
-  appointmentDescription: {
+  visitDescription: {
     fontSize: 15,
     color: '#64748B',
     fontFamily: 'Inter-Regular',
     lineHeight: 22,
   },
-  appointmentDetails: {
+  visitDetails: {
     flexDirection: 'row',
     gap: 18,
     marginTop: 10,

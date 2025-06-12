@@ -108,6 +108,11 @@ export class ApiService {
     });
   }
 
+  async searchPatients(params: Record<string, string>) {
+    const queryString = new URLSearchParams(params).toString();
+    return this.request(`/Patient?${queryString}`);
+  }
+
   // Practitioners
   async getPractitioners(params?: Record<string, string>) {
     const queryString = params ? new URLSearchParams(params).toString() : '';
@@ -188,6 +193,18 @@ export class ApiService {
   async getDashboardAnalytics(params?: Record<string, string>) {
     const queryString = params ? new URLSearchParams(params).toString() : '';
     return this.request(`/Analytics/dashboard${queryString ? `?${queryString}` : ''}`);
+  }
+
+  // Visits (Prenatal Visits)
+  async createPrenatalVisit(pregnancyId: string, visitData: any) {
+    return this.request(`/Pregnancy/${pregnancyId}/prenatal-visit`, {
+      method: 'POST',
+      body: JSON.stringify(visitData),
+    });
+  }
+
+  async getPrenatalVisits(pregnancyId: string) {
+    return this.request(`/Pregnancy/${pregnancyId}/prenatal-visit`);
   }
 }
 

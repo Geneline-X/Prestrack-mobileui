@@ -1,7 +1,12 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, TextInput, ScrollView, useWindowDimensions, Platform } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Image, TextInput, ScrollView, useWindowDimensions, Platform, ActivityIndicator, Alert } from 'react-native';
 import { Bell, Search, UserPlus, CalendarPlus, MessageSquare, FileText, AlertTriangle, Clock, Baby } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
+import { ApiService } from '../../services/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useIsFocused } from '@react-navigation/native';
+
+const apiService = new ApiService();
 
 // Example user data (replace with real user context or props as needed)
 const user = {
@@ -17,11 +22,99 @@ export default function PatientDashboard() {
   const isTablet = width >= 600;
   const isLarge = width >= 900;
 
+  const [patientCount, setPatientCount] = useState<number | null>(null);
+  const [isLoadingCount, setIsLoadingCount] = useState(true);
+  const [errorCount, setErrorCount] = useState<string | null>(null);
+  const [upcomingVisits, setUpcomingVisits] = useState<any[]>([]);
+  const [loadingVisits, setLoadingVisits] = useState(true);
+  const isFocused = useIsFocused ? useIsFocused() : true;
+
+  useEffect(() => {
+    const fetchPatientCount = async () => {
+      try {
+        const token = await AsyncStorage.getItem('auth_token');
+        if (!token) {
+          // Redirect to login if no token is found
+          router.replace('/login');
+          return;
+        }
+        apiService.setAuthToken(token);
+        const response = await apiService.getPatients({ _summary: 'count' }); // Request only count for efficiency
+        
+        if (response.error) {
+          throw new Error(response.error);
+        }
+
+        setPatientCount(response.total || 0);
+
+      } catch (err: any) {
+        console.error('Failed to fetch patient count:', err);
+        const errorMessage = err instanceof Error 
+          ? err.message 
+          : "Failed to load patient count.";
+        
+        if (errorMessage.includes('401') || errorMessage.includes('unauthorized') || errorMessage.includes('Token expired')) {
+          Alert.alert(
+            "Session Expired",
+            "Your session has expired. Please log in again.",
+            [{ 
+              text: "OK", 
+              onPress: () => router.replace('/login')
+            }]
+          );
+        } else {
+          setErrorCount(errorMessage);
+        }
+      } finally {
+        setIsLoadingCount(false);
+      }
+    };
+    
+    fetchPatientCount();
+  }, []);
+
+  useEffect(() => {
+    const fetchVisits = async () => {
+      setLoadingVisits(true);
+      try {
+        const token = await AsyncStorage.getItem('auth_token');
+        if (!token) return;
+        apiService.setAuthToken(token);
+        // Fetch all pregnancies and get visits for the first valid Pregnancy resource
+        const pregnancies = await apiService.getPregnancies({ status: 'active', _count: '1' });
+        let pregnancyId = null;
+        if (Array.isArray(pregnancies.entry)) {
+          const firstPregnancy = pregnancies.entry.find(
+            (e: any) => e.resource && (e.resource.resourceType === 'Pregnancy' || e.resource.resourceType === 'Condition') && typeof e.resource.id === 'string'
+          );
+          pregnancyId = firstPregnancy && typeof firstPregnancy.resource === 'object' ? (firstPregnancy.resource as { id?: string }).id : undefined;
+        }
+        if (pregnancyId) {
+          const visitsRes = await apiService.getPrenatalVisits(pregnancyId);
+          setUpcomingVisits(visitsRes.entry ? visitsRes.entry.map((e: any) => e.resource) : []);
+        } else {
+          setUpcomingVisits([]);
+        }
+      } catch (e) {
+        setUpcomingVisits([]);
+      } finally {
+        setLoadingVisits(false);
+      }
+    };
+    fetchVisits();
+  }, [isFocused]);
+
+  // Calculate responsive horizontal padding
+  const horizontalPadding = isLarge ? 120 : isTablet ? 48 : Math.max(12, width * 0.04);
+
+  // Calculate dynamic metric card width
+  const metricCardWidth = isLarge ? 220 : isTablet ? 180 : Math.max(140, (width - 2 * horizontalPadding - 20) / 2); // Adjusted calculation for small screens and gap
+
   return (
     <View style={[
       styles.container,
       {
-        paddingHorizontal: isLarge ? 120 : isTablet ? 48 : Math.max(12, width * 0.04),
+        paddingHorizontal: horizontalPadding, // Use calculated padding
         paddingTop: isLarge ? 80 : isTablet ? 60 : 40,
         maxWidth: 900,
         alignSelf: 'center',
@@ -51,14 +144,14 @@ export default function PatientDashboard() {
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={[
           styles.quickActionsScroll,
-          { paddingLeft: 0, paddingRight: Math.max(8, width * 0.02) },
+          { paddingLeft: horizontalPadding, paddingRight: horizontalPadding - 12 }, // Apply responsive padding, adjust right padding for last card's margin
         ]}
       >
         <TouchableOpacity style={styles.quickActionButton} onPress={() => router.replace('/(doctor)/create-patient')}>
           <UserPlus size={28} color="#6366F1" />
           <Text style={styles.quickActionText}>Add Patient</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.quickActionButton}>
+        <TouchableOpacity style={styles.quickActionButton} onPress={() => router.push('/(doctor)/visits')}>
           <CalendarPlus size={28} color="#10B981" />
           <Text style={styles.quickActionText}>Schedule Visit</Text>
         </TouchableOpacity>
@@ -66,9 +159,9 @@ export default function PatientDashboard() {
           <MessageSquare size={28} color="#F59E0B" />
           <Text style={styles.quickActionText}>Message</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.quickActionButton}>
-          <FileText size={28} color="#6366F1" />
-          <Text style={styles.quickActionText}>Reports</Text>
+        <TouchableOpacity style={styles.quickActionButton} onPress={() => router.push('/(doctor)/create-pregnancy')}>
+          <Baby size={28} color="#A0522D" />
+          <Text style={styles.quickActionText}>Add Pregnancy</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.quickActionButton}>
           <AlertTriangle size={28} color="#EF4444" />
@@ -76,7 +169,7 @@ export default function PatientDashboard() {
         </TouchableOpacity>
       </ScrollView>
       {/* Search Bar - moved up under quick actions */}
-      <View style={styles.searchBarContainer}>
+      <View style={[styles.searchBarContainer, { paddingHorizontal: horizontalPadding }]}>{/* Apply responsive padding */}
         <View style={styles.searchBar}>
           <Search size={20} color="#9CA3AF" strokeWidth={2} />
           <TextInput
@@ -86,103 +179,70 @@ export default function PatientDashboard() {
           />
         </View>
       </View>
-      {/* Upcoming Appointments Section */}
-      <Text style={styles.sectionTitle}>Upcoming Appointments</Text>
+      {/* Upcoming Visits Section */}
+      <Text style={[styles.sectionTitle, { paddingHorizontal: horizontalPadding }]}>Upcoming Visits</Text>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={[
           styles.appointmentsScroll,
-          { paddingLeft: 0, paddingRight: Math.max(8, width * 0.02) },
+          { paddingLeft: horizontalPadding, paddingRight: horizontalPadding - 12 },
         ]}
         style={{ marginTop: 10, marginBottom: 20 }}
       >
-        {/* Example appointment cards, replace with dynamic data as needed */}
-        <TouchableOpacity style={[
-          styles.appointmentCard,
-          {
-            width: isLarge ? 500 : isTablet ? 380 : Math.max(220, Math.min(width - 48, 380)),
-            maxWidth: 600,
-          },
-        ]}> 
-          <Text style={styles.appointmentTitle}>John Doe</Text>
-          <Text style={styles.appointmentDetails}>General Checkup</Text>
-          <View style={styles.appointmentDateTimeBox}>
-            <CalendarPlus size={16} color="#fff" style={{ marginRight: 6 }} />
-            <Text style={styles.appointmentDateTimeText}>June 12</Text>
-            <View style={{ width: 18 }} />
-            <Clock size={16} color="#fff" style={{ marginRight: 6, marginLeft: 0 }} />
-            <Text style={styles.appointmentDateTimeText}>10:00 AM</Text>
-          </View>
-        </TouchableOpacity>
-        <TouchableOpacity style={[
-          styles.appointmentCard,
-          {
-            width: isLarge ? 500 : isTablet ? 380 : Math.max(220, Math.min(width - 48, 380)),
-            maxWidth: 600,
-          },
-        ]}>
-          <Text style={styles.appointmentTitle}>Jane Smith</Text>
-          <Text style={styles.appointmentDetails}>Follow-up</Text>
-          <View style={styles.appointmentDateTimeBox}>
-            <CalendarPlus size={16} color="#fff" style={{ marginRight: 6 }} />
-            <Text style={styles.appointmentDateTimeText}>June 13</Text>
-            <View style={{ width: 18 }} />
-            <Clock size={16} color="#fff" style={{ marginRight: 6, marginLeft: 0 }} />
-            <Text style={styles.appointmentDateTimeText}>2:30 PM</Text>
-          </View>
-        </TouchableOpacity>
-        <TouchableOpacity style={[
-          styles.appointmentCard,
-          {
-            width: isLarge ? 500 : isTablet ? 380 : Math.max(220, Math.min(width - 48, 380)),
-            maxWidth: 600,
-          },
-        ]}>
-          <Text style={styles.appointmentTitle}>Michael Brown</Text>
-          <Text style={styles.appointmentDetails}>Lab Results</Text>
-          <View style={styles.appointmentDateTimeBox}>
-            <CalendarPlus size={16} color="#fff" style={{ marginRight: 6 }} />
-            <Text style={styles.appointmentDateTimeText}>June 14</Text>
-            {/* Spacer for layout, replaced View with Text for RN ScrollView compatibility */}
-            <Text style={{ width: 18 }} />
-            <Clock size={16} color="#fff" style={{ marginRight: 6, marginLeft: 0 }} />
-            <Text style={styles.appointmentDateTimeText}>9:00 AM</Text>
-          </View>
-        </TouchableOpacity>
+        {loadingVisits ? (
+          <ActivityIndicator size="small" color="#6366F1" style={{ marginTop: 20 }} />
+        ) : upcomingVisits.length === 0 ? (
+          <Text style={{ color: '#64748B', fontSize: 16, marginTop: 20 }}>No upcoming visits.</Text>
+        ) : (
+          upcomingVisits.map((visit, idx) => (
+            <TouchableOpacity key={visit.id || idx} style={[
+              styles.appointmentCard,
+              { width: isLarge ? 500 : isTablet ? 380 : Math.max(220, width - 2 * horizontalPadding - 12) },
+            ]}>
+              <Text style={styles.appointmentTitle}>{visit.reasonCode?.[0]?.text || 'Prenatal Visit'}</Text>
+              <Text style={styles.appointmentDetails}>{visit.description || 'Scheduled prenatal care visit'}</Text>
+              <View style={styles.appointmentDateTimeBox}>
+                <CalendarPlus size={16} color="#fff" style={{ marginRight: 6 }} />
+                <Text style={styles.appointmentDateTimeText}>{visit.start?.split('T')[0]}</Text>
+                <View style={{ width: 18 }} />
+                <Clock size={16} color="#fff" style={{ marginRight: 6, marginLeft: 0 }} />
+                <Text style={styles.appointmentDateTimeText}>{visit.start?.split('T')[1]?.slice(0,5) || ''}</Text>
+              </View>
+            </TouchableOpacity>
+          ))
+        )}
       </ScrollView>
       {/* Overview Matrices Title */}
-      <Text style={styles.overviewTitle}>Overview Matrices</Text>
+      <Text style={[styles.overviewTitle, { paddingHorizontal: horizontalPadding, marginTop: 20 }]}>Overview Matrices</Text>{/* Adjusted spacing and applied responsive padding */}
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={[
           styles.metricsHorizontalScroll,
-          { paddingLeft: 0, paddingRight: Math.max(8, width * 0.02) },
+          { paddingLeft: horizontalPadding, paddingRight: horizontalPadding - 10 }, // Apply responsive padding, adjust right padding for last card's margin
         ]}
       >
         <View style={[
           styles.metricCard,
-          {
-            width: isLarge ? 220 : isTablet ? 180 : Math.max(120, Math.min(width * 0.38, 180)),
-            height: isLarge ? 200 : isTablet ? 150 : 120,
-            maxWidth: 240,
-          },
-        ]}> {/* Blue */}
+          { width: metricCardWidth, backgroundColor: '#3B82F6' }, // Blue
+        ]}> 
           <View style={styles.metricIconRow}>
             <UserPlus size={28} color="#fff" style={styles.metricIcon} />
           </View>
-          <Text style={styles.metricValue}>128</Text>
+          {isLoadingCount ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : errorCount ? (
+            <Text style={[styles.metricValue, { fontSize: 14 }]}>Error</Text>
+          ) : (
+            <Text style={styles.metricValue}>{patientCount}</Text>
+          )}
           <Text style={[styles.metricLabelText, { color: '#DBEAFE' }]}>Patients Under Care</Text>
         </View>
         <View style={[
           styles.metricCard,
-          {
-            width: isLarge ? 220 : isTablet ? 180 : Math.max(120, Math.min(width * 0.38, 180)),
-            height: isLarge ? 200 : isTablet ? 150 : 120,
-            maxWidth: 240,
-          },
-        ]}> {/* Green */}
+          { width: metricCardWidth, backgroundColor: '#10B981' }, // Green
+        ]}> 
           <View style={styles.metricIconRow}>
             <Baby size={28} color="#fff" style={styles.metricIcon} />
           </View>
@@ -191,12 +251,8 @@ export default function PatientDashboard() {
         </View>
         <View style={[
           styles.metricCard,
-          {
-            width: isLarge ? 220 : isTablet ? 180 : Math.max(120, Math.min(width * 0.38, 180)),
-            height: isLarge ? 200 : isTablet ? 150 : 120,
-            maxWidth: 240,
-          },
-        ]}> {/* Red */}
+          { width: metricCardWidth, backgroundColor: '#EF4444' }, // Red
+        ]}> 
           <View style={styles.metricIconRow}>
             <AlertTriangle size={28} color="#fff" style={styles.metricIcon} />
           </View>
@@ -205,17 +261,14 @@ export default function PatientDashboard() {
         </View>
         <View style={[
           styles.metricCard,
-          {
-            width: isLarge ? 220 : isTablet ? 180 : Math.max(120, Math.min(width * 0.38, 180)),
-            height: isLarge ? 200 : isTablet ? 150 : 120,
-            maxWidth: 240,
-          },
-        ]}> {/* Purple */}
+          { width: metricCardWidth, backgroundColor: '#F59E0B' }, // Orange/Yellow for Referrals
+        ]}> 
           <View style={styles.metricIconRow}>
-            <CalendarPlus size={28} color="#fff" style={styles.metricIcon} />
+            <UserPlus size={28} color="#fff" style={styles.metricIcon} />{/* Changed icon to UserPlus */}
           </View>
-          <Text style={styles.metricValue}>5</Text>
-          <Text style={[styles.metricLabelText, { color: '#E9D5FF' }]}>Recent Births</Text>
+          <Text style={styles.metricValue}>5</Text>{/* Keeping value as is for now */
+          }
+          <Text style={[styles.metricLabelText, { color: '#FEF3C7' }]}>Referrals</Text>{/* Changed text to Referrals and updated color */}
         </View>
       </ScrollView>
     </View>
@@ -226,14 +279,14 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F8FAFC',
-    paddingTop: 60,
-    paddingHorizontal: 24, // Changed to 24 for consistency
+    // Removed paddingTop and paddingHorizontal from here as they are applied dynamically
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 32, // Increased for more space below header
+    // Removed paddingHorizontal from here as it is applied to the container
   },
   greetingContainer: {
     flexDirection: 'column',
@@ -274,7 +327,8 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   searchBarContainer: {
-    marginBottom: 10, // minimal space below search bar
+    marginBottom: 20, // Increased space below search bar
+    // Removed paddingHorizontal from here as it is applied dynamically
   },
   searchBar: {
     flexDirection: 'row',
@@ -294,20 +348,20 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
   },
   quickActionsScroll: {
-    gap: 8,
-    paddingRight: 8,
-    marginBottom: 8, // minimal space below quick actions
+    gap: 12, // Increased gap between quick action buttons
+    paddingBottom: 16, // Increased space below quick actions
+    // Removed paddingLeft and paddingRight from here
   },
   quickActionButton: {
-    width: 80, // increased from 68
-    height: 80, // increased from 68
+    width: 80,
+    height: 80,
     backgroundColor: '#fff',
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#E5E7EB',
     alignItems: 'center',
     justifyContent: 'center',
-    marginHorizontal: 2,
+    // Removed marginHorizontal
     shadowColor: '#6366F1',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.04,
@@ -316,8 +370,8 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   quickActionText: {
-    marginTop: 2, // minimal space
-    fontSize: 9, // even smaller text
+    marginTop: 4, // Increased space below icon
+    fontSize: 10, // Slightly increased font size
     color: '#64748B',
     fontFamily: 'Inter-Medium',
     textAlign: 'center',
@@ -326,23 +380,24 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontFamily: 'Inter-Bold',
     color: '#0F172A',
-    marginTop: 5,
-    marginBottom: 5, // minimal space below
+    marginBottom: 16, // Standardized spacing below section titles
+    marginTop: 20, // Added space above section
+    // Removed marginLeft and paddingHorizontal
   },
   appointmentsScroll: {
-    gap: 16,
+    gap: 12, // Adjusted gap between appointment cards
+    // Removed paddingLeft and paddingRight from here
   },
   appointmentCard: {
-    width: '100%', // Full width for responsiveness
-    maxWidth: 500, // Maximum width
+    width: '100%',
+    maxWidth: 500,
     height: 110,
-    backgroundColor: '#2563EB', // filled blue
+    backgroundColor: '#2563EB',
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#2563EB', // blue border
-    marginRight: 8,
-    marginBottom: 1,
-    marginTop: 3,
+    borderColor: '#2563EB',
+    marginRight: 12, // Adjusted spacing between cards
+    // Removed marginBottom and marginTop
     padding: 16,
     justifyContent: 'center',
     shadowColor: '#2563EB',
@@ -354,17 +409,18 @@ const styles = StyleSheet.create({
   appointmentTitle: {
     fontSize: 16,
     fontFamily: 'Inter-Bold',
-    color: '#fff', // white for contrast
-    marginBottom: 6,
+    color: '#fff',
+    marginBottom: 8, // Adjusted spacing
   },
   appointmentDateTimeBox: {
     alignSelf: 'flex-start',
     backgroundColor: 'rgba(255,255,255,0.18)',
     borderRadius: 8,
-    paddingHorizontal: 55,
-    paddingVertical: 4,
-    marginBottom: 8,
+    paddingHorizontal: 12, // Adjusted padding
+    paddingVertical: 6, // Adjusted padding
+    marginTop: 8, // Added space above
     flexDirection: 'row',
+    alignItems: 'center', // Center items vertically
   },
   appointmentDateTimeText: {
     color: '#fff',
@@ -375,63 +431,56 @@ const styles = StyleSheet.create({
   appointmentDetails: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#DBEAFE', // light blue for details
-    marginBottom: 2,
+    color: '#DBEAFE',
+    marginBottom: 4, // Adjusted spacing
   },
   overviewTitle: {
-    fontSize: 16,
+    fontSize: 18, // Standardized font size
     fontFamily: 'Inter-Bold',
     color: '#0F172A',
-    marginBottom: 8,
-    marginTop: 1,
-    marginLeft: 2,
+    marginBottom: 16, // Standardized spacing below section titles
+    marginTop: 20, // Added space above overview section
+    // Removed marginLeft and paddingHorizontal
   },
   metricsHorizontalScroll: {
-    flexDirection: 'row',
-    gap: 10,
+    gap: 10, // Keep gap between metric cards
     paddingBottom: 8,
-    alignItems: 'center',
-    paddingLeft: 2,
-    paddingRight: 8,
+    // Removed paddingLeft and paddingRight from here
   },
   metricCard: {
-    width: '100%', // Full width for responsiveness
-    minWidth: 120,
-    maxWidth: 220,
+    minWidth: 140,
     height: 120,
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#6366F1',
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.10,
-    shadowRadius: 8,
-    elevation: 2,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    borderWidth: 0,
     padding: 10,
-    marginRight: 14,
+    marginRight: 10, // Keep marginRight for spacing between cards
   },
   metricValue: {
-    fontSize: 15, // larger
+    fontSize: 28,
     fontFamily: 'Inter-Bold',
     marginBottom: 4,
     color: '#fff',
   },
   metricLabelText: {
-    fontSize: 10, // larger
+    fontSize: 12,
     fontFamily: 'Inter-Medium',
     textAlign: 'center',
-    lineHeight: 18,
+    lineHeight: 16,
   },
   metricIconRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 6,
-    gap: 6,
+    marginBottom: 8,
   },
   metricIcon: {
-    marginRight: 2,
+    marginRight: 0,
   },
 });

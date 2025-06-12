@@ -36,6 +36,10 @@ export default function PatientLayout() {
             <Calendar size={24} color={getTabColor('appointments')} strokeWidth={2} />
             <Text style={styles.tabLabel}>Schedule</Text>
           </TouchableOpacity>
+          <TouchableOpacity style={styles.tab} onPress={() => router.replace('/(doctor)/visits')}>
+            <Calendar size={24} color={getTabColor('visits')} strokeWidth={2} />
+            <Text style={styles.tabLabel}>Visits</Text>
+          </TouchableOpacity>
           <TouchableOpacity style={styles.tab} onPress={() => router.replace('/(doctor)/profile')}>
             <Settings size={24} color={getTabColor('profile')} strokeWidth={2} />
             <Text style={styles.tabLabel}>Settings</Text>

@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { Mail, Lock, Baby } from 'lucide-react-native';
+import { Mail, Lock, Baby, Eye, EyeOff } from 'lucide-react-native';
 import apiService from '../../services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -54,6 +54,7 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleLogin = async () => {
     setError('');
@@ -70,10 +71,18 @@ export default function LoginScreen() {
         await AsyncStorage.setItem('auth_token', token);
         apiService.setAuthToken(token);
         const user = (res as any).user;
+        if (!user || !user.role) {
+          setError('User role not found. Please contact support.');
+          return;
+        }
         if (user.role === 'super_admin' || user.role === 'facility_admin' || user.role === 'admin') {
           await router.replace('/(admin)/dashboard');
-        } else {
+        } else if (user.role === 'patient') {
+          await router.replace('/(patient)/dashboard');
+        } else if (user.role === 'doctor' || user.role === 'nurse') {
           await router.replace('/(doctor)/dashboard');
+        } else {
+          setError('Unknown user role. Please contact support.');
         }
       } else if ((res as any).resourceType === 'OperationOutcome' && Array.isArray((res as any).issue)) {
         setError((res as any).issue[0]?.diagnostics || 'Login failed');
@@ -122,14 +131,21 @@ export default function LoginScreen() {
               <View style={styles.inputWrapper}>
                 <Lock size={20} color="#9CA3AF" strokeWidth={2} />
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, { flex: 1 }]}
                   placeholder="Password"
                   value={password}
                   onChangeText={setPassword}
-                  secureTextEntry
+                  secureTextEntry={!showPassword}
                   autoCapitalize="none"
                   placeholderTextColor="#9CA3AF"
                 />
+                <TouchableOpacity onPress={() => setShowPassword((v) => !v)}>
+                  {showPassword ? (
+                    <EyeOff size={20} color="#9CA3AF" />
+                  ) : (
+                    <Eye size={20} color="#9CA3AF" />
+                  )}
+                </TouchableOpacity>
               </View>
             </View>
 
