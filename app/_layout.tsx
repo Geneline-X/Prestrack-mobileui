@@ -1,8 +1,10 @@
 import { useEffect } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 import { useFonts } from 'expo-font';
+import { Platform } from 'react-native';
 import {
   Inter_400Regular,
   Inter_500Medium,
@@ -34,14 +36,22 @@ export default function RootLayout() {
   }
 
   return (
-    <>
-      <StatusBar style="auto" />
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="login/index" />
-        <Stack.Screen name="(doctor)" />
-        <Stack.Screen name="(admin)" />
-        <Stack.Screen name="+not-found" />
-      </Stack>
-    </>
+    <SafeAreaProvider>
+      <SafeAreaView 
+        style={{ 
+          flex: 1,
+          backgroundColor: '#F8FAFC'
+        }}
+        edges={['top', 'right', 'bottom', 'left']}
+      >
+        <StatusBar style="auto" />
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="login/index" />
+          <Stack.Screen name="(doctor)" />
+          <Stack.Screen name="(patient)" />
+          <Stack.Screen name="+not-found" />
+        </Stack>
+      </SafeAreaView>
+    </SafeAreaProvider>
   );
 }

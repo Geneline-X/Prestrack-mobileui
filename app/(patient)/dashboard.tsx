@@ -1,161 +1,401 @@
-import React from 'react';
-import { View, ScrollView, StyleSheet, Platform, StatusBar } from 'react-native';
-import { Text, Surface } from 'react-native-paper';
-import { Stack } from 'expo-router';
-import { format } from 'date-fns';
-import type { PatientData } from '../types/patient';
-import { Calendar, Clock, Activity, FileText } from 'lucide-react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+"use client"
 
-// Playful color palette
+import { useState, useEffect } from "react"
+import { View, ScrollView, StyleSheet, StatusBar, RefreshControl, TouchableOpacity } from "react-native"
+import { Text, Surface } from "react-native-paper"
+import { format } from "date-fns"
+import { Calendar, Activity, FileText, Heart, Baby, TrendingUp } from "lucide-react-native"
+import { useSafeAreaInsets } from "react-native-safe-area-context"
+import * as SecureStore from 'expo-secure-store';
+import { useRouter } from 'expo-router'
+import { apiService } from '../../services/api'
+
+// Define FHIR types
+type Resource = {
+  resourceType: string;
+  id?: string;
+  [key: string]: any;
+};
+
+// BundleEntry type is already defined above
+
+type Bundle = {
+  resourceType: 'Bundle';
+  type: 'searchset' | 'collection' | 'batch' | 'transaction' | 'batch-response' | 'transaction-response' | 'history' | 'searchset' | 'collection';
+  total?: number;
+  entry?: BundleEntry[];
+  link?: Array<{ relation: string; url: string }>;
+};
+
+type Patient = Resource & {
+  resourceType: 'Patient';
+  id: string;
+  name?: Array<{
+    given?: string[];
+    family?: string;
+    text?: string;
+  }>;
+  gender?: string;
+  birthDate?: string;
+  telecom?: Array<{
+    system: 'phone' | 'fax' | 'email' | 'pager' | 'url' | 'sms' | 'other';
+    value: string;
+    use?: 'home' | 'work' | 'temp' | 'old' | 'mobile';
+  }>;
+  address?: Array<{
+    use?: 'home' | 'work' | 'temp' | 'old' | 'billing';
+    line?: string[];
+    city?: string;
+    state?: string;
+    postalCode?: string;
+    country?: string;
+  }>;
+};
+
+type Observation = Resource & {
+  resourceType: 'Observation';
+  status: 'registered' | 'preliminary' | 'final' | 'amended' | 'corrected' | 'cancelled' | 'entered-in-error' | 'unknown';
+  code: {
+    coding: Array<{
+      system?: string;
+      code?: string;
+      display?: string;
+    }>;
+    text?: string;
+  };
+  subject?: {
+    reference: string;
+    display?: string;
+  };
+  effectiveDateTime?: string;
+  valueQuantity?: {
+    value: number;
+    unit?: string;
+    system?: string;
+    code?: string;
+  };
+  valueString?: string;
+  valueCodeableConcept?: {
+    coding: Array<{
+      system?: string;
+      code?: string;
+      display?: string;
+    }>;
+    text?: string;
+  };
+};
+
+type Condition = Resource & {
+  resourceType: 'Condition';
+  clinicalStatus?: {
+    coding: Array<{
+      system?: string;
+      code: string;
+      display?: string;
+    }>;
+    text?: string;
+  };
+  code?: {
+    coding: Array<{
+      system?: string;
+      code: string;
+      display?: string;
+    }>;
+    text?: string;
+  };
+  subject?: {
+    reference: string;
+    display?: string;
+  };
+  onsetDateTime?: string;
+  recordedDate?: string;
+};
+
+// Simple loading component
+const LoadingSpinner = () => (
+  <View style={styles.centered}>
+    <Text>Loading...</Text>
+  </View>
+);
+
+// Simple error message component
+const ErrorMessage = ({ message }: { message: string }) => (
+  <View style={styles.centered}>
+    <Text style={styles.errorText}>Error: {message}</Text>
+  </View>
+);
+
+interface DashboardData {
+  patientId: string
+  pregnancyStatus: string
+  weeksPregnant: number
+  nextAppointment?: string
+  recentObservations: Array<{
+    id: string
+    type: string
+    value: string
+    date: string
+  }>
+  patient?: any
+  activePregnancy?: any
+}
+
+interface FHIRResource {
+  resourceType: string;
+  id?: string;
+  [key: string]: any;
+}
+
+interface BundleEntry {
+  resource: FHIRResource;
+  fullUrl?: string;
+}
+
+interface DashboardResponse {
+  // Direct response format
+  patient?: any;
+  activePregnancy?: any;
+  recentObservations?: any[];
+  summary?: any;
+  
+  // FHIR Bundle format
+  resourceType?: string;
+  type?: string;
+  entry?: BundleEntry[];
+  total?: number;
+}
+
 const COLORS = {
-  flagship: '#2563EB',      // Blue
-  flagshipDark: '#1E40AF', // Dark blue
-  flagshipLight: '#60A5FA',// Light blue
-  teal: '#14B8A6',         // Teal accent
-  purple: '#A78BFA',       // Purple accent
-  orange: '#FB923C',       // Orange accent
-  background: '#F3F4F6',   // Soft gray
-  surface: '#FFFFFF',      // White
-  surfaceAlt: '#F1F5F9',   // Alt surface
-  text: '#1E293B',         // Dark text
-  textSecondary: '#64748B',// Secondary text
-  divider: '#E5E7EB',      // Divider
-  shadow: 'rgba(37, 99, 235, 0.08)',
-};
+  primary: "#6366F1",
+  primaryDark: "#4F46E5",
+  primaryLight: "#A5B4FC",
+  secondary: "#EC4899",
+  accent: "#10B981",
+  warning: "#F59E0B",
+  background: "#F8FAFC",
+  surface: "#FFFFFF",
+  surfaceAlt: "#F1F5F9",
+  text: "#1E293B",
+  textSecondary: "#64748B",
+  divider: "#E2E8F0",
+  success: "#22C55E",
+  error: "#EF4444",
+}
 
-// Mock data - Replace with actual data from your backend
-const patientData: PatientData = {
-  name: 'Jane Doe',
-  age: 28,
-  pregnancyStatus: 'Active',
-  gestationalAge: '24 weeks',
-  estimatedDueDate: new Date('2024-09-15'),
-  nextAppointment: new Date('2024-04-10'),
-    recentObservations: [
-    {
-      date: '2024-03-20',
-      note: 'Blood pressure: 120/80 - Normal range',
-    },
-    {
-      date: '2024-03-15',
-      note: 'Weight: 65kg - Within expected range',
-    },
-  ],
-};
-
-export default function PatientDashboard() {
+export default function Dashboard() {
+  const router = useRouter();
   const insets = useSafeAreaInsets();
+  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
-    return (
-    <View style={styles.container}>
-      <StatusBar
-        barStyle="dark-content"
-        backgroundColor={COLORS.surface}
-        translucent
-      />
+  const fetchDashboardData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
       
-      <Stack.Screen
-        options={{
-          title: 'Dashboard',
-          headerStyle: {
-            backgroundColor: COLORS.surface,
-          },
-          headerShadowVisible: false,
-          headerTitleStyle: {
-            fontSize: 20,
-            fontWeight: '600',
-            color: COLORS.flagshipDark,
-          },
-        }}
-      />
-
-      {/* Static Welcome Section */}
-      <View style={[styles.welcomeSection, { paddingTop: insets.top }]}>
-        <View style={styles.welcomeContent}>
-          <Text style={styles.welcomeText}>
-            Hello, {patientData.name.split(' ')[0]} 👋
-          </Text>
-          <Text style={styles.subtitleText}>
-            Here's your pregnancy journey
-          </Text>
-        </View>
-      </View>
+      // Get the token from storage
+      const token = await SecureStore.getItemAsync('auth_token');
+      if (!token) {
+        console.log('No auth token found, redirecting to login');
+        await router.replace('/login');
+        return;
+      }
       
-      {/* Scrollable Content */}
-      <ScrollView 
-        style={styles.scrollContainer}
-        contentContainerStyle={[
-          styles.contentContainer,
-          { paddingBottom: Math.max(insets.bottom, 20) } // Ensure content doesn't get hidden behind bottom nav
-        ]}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.mainContent}>
-          {/* Key Info Section */}
-          <View style={styles.infoGrid}>
-            <Surface style={[styles.infoCard, { borderLeftColor: COLORS.flagship, backgroundColor: COLORS.surface }]}>
-              <View style={styles.cardContent}>
-                <Activity size={28} color={COLORS.teal} />
-                <Text style={styles.infoLabel}>Pregnancy Status</Text>
-                <Text style={[styles.infoValue, { color: COLORS.flagshipDark }]}>
-                  {patientData.pregnancyStatus}
-                </Text>
-              </View>
-            </Surface>
+      apiService.setAuthToken(token);
+      
+      // Get user info from SecureStore
+      const userInfo = await SecureStore.getItemAsync('user_info');
+      if (!userInfo) {
+        throw new Error('User information not found. Please log in again.');
+      }
+      
+      const user = JSON.parse(userInfo);
+      
+      try {
+        // Use the getPatientDashboard method which will handle the patient-specific API calls
+        const dashboardResponse = await apiService.getPatientDashboard<DashboardResponse>();
+        
+        console.log('Dashboard response:', dashboardResponse);
+        
+        // Extract data from the dashboard response
+        const patient = dashboardResponse.patient;
+        const recentObservations = dashboardResponse.recentObservations || [];
+        const activePregnancy = dashboardResponse.activePregnancy;
+        
+        if (!patient) {
+          throw new Error('Patient data not found in dashboard response');
+        }
+        
+        // Calculate weeks pregnant if we have the last menstrual period
+        let weeksPregnant = 0;
+        if (activePregnancy?.lastMenstrualPeriod) {
+          try {
+            const lmp = new Date(activePregnancy.lastMenstrualPeriod);
+            const today = new Date();
+            const diffTime = Math.abs(today.getTime() - lmp.getTime());
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            weeksPregnant = Math.floor(diffDays / 7);
+          } catch (error) {
+            console.error('Error calculating weeks pregnant:', error);
+          }
+        } else if (activePregnancy?.onsetDateTime) {
+          // Fallback to onsetDateTime if lastMenstrualPeriod is not available
+          try {
+            const lmp = new Date(activePregnancy.onsetDateTime);
+            const today = new Date();
+            const diffTime = Math.abs(today.getTime() - lmp.getTime());
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            weeksPregnant = Math.floor(diffDays / 7);
+          } catch (error) {
+            console.error('Error calculating weeks pregnant from onset date:', error);
+          }
+        }
+        
+        // Transform observations to match the expected format
+        const formattedObservations = recentObservations.map(obs => {
+          let value = 'N/A';
+          
+          if (obs.valueQuantity) {
+            value = `${obs.valueQuantity.value} ${obs.valueQuantity.unit || ''}`.trim();
+          } else if (obs.valueString) {
+            value = obs.valueString;
+          } else if (obs.valueCodeableConcept?.text) {
+            value = obs.valueCodeableConcept.text;
+          }
+          
+          return {
+            id: obs.id || '',
+            type: obs.code?.text || 'Observation',
+            value,
+            date: obs.effectiveDateTime ? format(new Date(obs.effectiveDateTime), 'MMM d, yyyy') : 'Unknown date',
+          };
+        });
+        
+        // Update the dashboard data state
+        setDashboardData({
+          patientId: patient.id || '',
+          pregnancyStatus: activePregnancy ? 'Pregnant' : 'Not Pregnant',
+          weeksPregnant,
+          nextAppointment: patient.nextAppointment,
+          recentObservations: formattedObservations,
+          patient,
+          activePregnancy
+        });
+      } catch (error: unknown) {
+        console.error('Error fetching dashboard data:', error);
+        
+        // Handle authentication errors
+        if (error && 
+            typeof error === 'object' && 
+            'message' in error && 
+            typeof error.message === 'string' &&
+            (error.message.includes('401') || 
+            ('status' in error && (error as any).status === 401))) {
+          console.log('Authentication error, redirecting to login');
+          await Promise.all([
+            SecureStore.deleteItemAsync('auth_token'),
+            SecureStore.deleteItemAsync('refresh_token')
+          ]);
+          router.replace('/login');
+          return;
+        }
+        
+        setError(error instanceof Error ? error.message : 'Failed to load dashboard data. Please try again.');
+      }
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
 
-            <Surface style={[styles.infoCard, { borderLeftColor: COLORS.purple, backgroundColor: COLORS.surfaceAlt }]}>
-              <View style={styles.cardContent}>
-                <Clock size={28} color={COLORS.purple} />
-                <Text style={styles.infoLabel}>Gestational Age</Text>
-                <Text style={[styles.infoValue, { color: COLORS.flagshipDark }]}>
-                  {patientData.gestationalAge}
-                </Text>
-              </View>
-            </Surface>
+  useEffect(() => {
+    fetchDashboardData();
+  }, []);
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchDashboardData();
+  };
+
+  const getObservationIcon = (type: string) => {
+    switch (type.toLowerCase()) {
+      case "blood-pressure":
+        return Heart
+      case "weight":
+        return TrendingUp
+      case "temperature":
+        return Activity
+      default:
+        return FileText
+    }
+  }
+
+  const getObservationColor = (type: string) => {
+    switch (type.toLowerCase()) {
+      case "blood-pressure":
+        return COLORS.error
+      case "weight":
+        return COLORS.accent
+      case "temperature":
+        return COLORS.warning
+      default:
+        return COLORS.primary
+    }
+  }
+
+  return (
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      <StatusBar barStyle="dark-content" />
+      
+      {loading ? (
+        <LoadingSpinner />
+      ) : error ? (
+        <ErrorMessage message={error} />
+      ) : dashboardData ? (
+        <ScrollView
+          contentContainerStyle={styles.scrollView}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }>
+          {/* Dashboard content */}
+          <View style={styles.welcomeSection}>
+            <Text style={styles.welcomeText}>Welcome back, {dashboardData.patient?.name?.[0]?.given?.[0] || 'Patient'}</Text>
+            <Text style={styles.subtitle}>Here's your pregnancy overview</Text>
           </View>
-
-          {/* Next Appointment Section */}
-          <Surface style={[styles.appointmentCard, { borderLeftColor: COLORS.orange }]}>
-            <View style={styles.appointmentHeader}>
-              <View style={[styles.iconContainer, { backgroundColor: COLORS.surfaceAlt }]}>
-                <Calendar size={24} color={COLORS.orange} />
-              </View>
-              <Text style={styles.sectionTitle}>Next Appointment</Text>
+          
+          <View style={styles.statsContainer}>
+            <View style={styles.statCard}>
+              <Text style={styles.statValue}>{dashboardData.weeksPregnant} weeks</Text>
+              <Text style={styles.statLabel}>Pregnant</Text>
             </View>
-            <View style={styles.divider} />
-            <Text style={styles.appointmentDate}>
-              {format(patientData.nextAppointment, 'EEEE, MMMM d')}
-            </Text>
-            <Text style={styles.appointmentTime}>
-              {format(patientData.nextAppointment, 'h:mm a')}
-            </Text>
-          </Surface>
-
-          {/* Recent Observations */}
-          <Surface style={[styles.observationsCard, { borderLeftColor: COLORS.teal }]}>
-            <View style={styles.observationHeader}>
-              <View style={[styles.iconContainer, { backgroundColor: COLORS.surfaceAlt }]}>
-                <FileText size={24} color={COLORS.teal} />
-              </View>
-              <Text style={styles.sectionTitle}>Recent Observations</Text>
+            <View style={styles.statCard}>
+              <Text style={styles.statValue}>
+                {dashboardData.activePregnancy?.status || 'N/A'}
+              </Text>
+              <Text style={styles.statLabel}>Status</Text>
             </View>
-            <View style={styles.divider} />
-            {patientData.recentObservations.map((observation, index) => (
-              <View key={index} style={styles.observationItem}>
-                <View style={styles.observationContent}>
-                  <Text style={styles.observationDate}>{observation.date}</Text>
-                  <Text style={styles.observationNote}>{observation.note}</Text>
+          </View>
+          
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Recent Observations</Text>
+            {dashboardData.recentObservations.length > 0 ? (
+              dashboardData.recentObservations.map((obs, index) => (
+                <View key={obs.id || index} style={styles.observationCard}>
+                  <Text style={styles.observationType}>{obs.type}</Text>
+                  <Text style={styles.observationValue}>{obs.value}</Text>
+                  <Text style={styles.observationDate}>{obs.date}</Text>
                 </View>
-                {index < patientData.recentObservations.length - 1 && (
-                  <View style={styles.itemDivider} />
-                )}
-              </View>
-            ))}
-          </Surface>
-        </View>
-      </ScrollView>
+              ))
+            ) : (
+              <Text style={styles.noDataText}>No recent observations</Text>
+            )}
+          </View>
+        </ScrollView>
+      ) : (
+        <Text>No data available</Text>
+      )}
     </View>
   );
 }
@@ -163,72 +403,150 @@ export default function PatientDashboard() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: '#fff',
+  },
+  scrollView: {
+    padding: 16,
+  },
+  centered: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorText: {
+    color: '#ef4444',
+    textAlign: 'center',
+    margin: 16,
   },
   welcomeSection: {
-    backgroundColor: COLORS.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.divider,
-    zIndex: 1,
-  },
-  welcomeContent: {
-    paddingHorizontal: 24,
-    paddingVertical: 20,
+    marginBottom: 24,
+    paddingHorizontal: 16,
   },
   welcomeText: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: COLORS.flagshipDark,
-    letterSpacing: -0.5,
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 8,
+    color: '#1f2937',
   },
-  subtitleText: {
+  subtitle: {
     fontSize: 16,
-    color: COLORS.textSecondary,
-    marginTop: 12,
-    letterSpacing: 0.2,
+    color: '#6b7280',
   },
-  scrollContainer: {
-    flex: 1,
+  statsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 24,
+    paddingHorizontal: 8,
   },
-  contentContainer: {
-    flexGrow: 1,
+  statCard: {
+    backgroundColor: '#f9fafb',
+    borderRadius: 12,
+    padding: 16,
+    flex: 0.48,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
+  statValue: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 4,
+    color: '#111827',
+  },
+  statLabel: {
+    color: '#6b7280',
+    fontSize: 14,
+  },
+  section: {
+    marginBottom: 24,
+    paddingHorizontal: 8,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 12,
+    color: '#1f2937',
+  },
+  cardSectionTitle: {
+    marginLeft: 12,
+    fontSize: 18,
+    fontWeight: '600',
+    color: COLORS.text,
+  },
+  observationCard: {
+    backgroundColor: '#f9fafb',
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 1,
+    elevation: 1,
+  },
+  observationType: {
+    fontWeight: '600',
+    marginBottom: 4,
+    color: '#111827',
+    fontSize: 16,
+    textTransform: 'capitalize',
+  },
+  observationValue: {
+    fontSize: 18,
+    marginBottom: 4,
+    color: '#111827',
+    fontWeight: '500',
+  },
+  observationDate: {
+    color: '#6b7280',
+    fontSize: 12,
+    marginTop: 4,
+  },
+  noDataText: {
+    color: '#9ca3af',
+    textAlign: 'center',
+    marginVertical: 16,
+    fontStyle: 'italic',
+  },
+  // Scroll container style
+  // Scroll container style is defined above
   mainContent: {
     paddingTop: 24,
   },
-  infoGrid: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    gap: 12,
-    marginBottom: 24, // Increased spacing before next section
-  },
-  infoCard: {
-    flex: 1,
+  pregnancyCard: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+    padding: 20,
     borderRadius: 16,
     borderLeftWidth: 4,
-    elevation: 2,
     backgroundColor: COLORS.surface,
-    shadowColor: COLORS.shadow,
+    elevation: 2,
+    shadowColor: COLORS.primary,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
   },
-  cardContent: {
-    padding: 20,
-    alignItems: 'center',
+  pregnancyHeader: {
+    flexDirection: "row",
+    alignItems: "center",
   },
-  infoLabel: {
-    fontSize: 12,
-    marginTop: 12,
-    color: COLORS.textSecondary,
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
+  pregnancyInfo: {
+    marginLeft: 16,
+    flex: 1,
   },
-  infoValue: {
+  pregnancyStatus: {
     fontSize: 18,
-    fontWeight: '600',
-    marginTop: 4,
-    letterSpacing: 0.3,
+    fontWeight: "600",
+    color: COLORS.text,
+    marginBottom: 4,
+  },
+  pregnancyWeeks: {
+    fontSize: 24,
+    fontWeight: "700",
+    color: COLORS.secondary,
   },
   appointmentCard: {
     marginHorizontal: 16,
@@ -238,26 +556,21 @@ const styles = StyleSheet.create({
     borderLeftWidth: 4,
     backgroundColor: COLORS.surface,
     elevation: 2,
-    shadowColor: COLORS.shadow,
+    shadowColor: COLORS.primary,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
   },
   appointmentHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     marginBottom: 16,
   },
   iconContainer: {
-    padding: 10,
+    padding: 12,
     borderRadius: 12,
   },
-  sectionTitle: {
-    marginLeft: 12,
-    fontSize: 18,
-    fontWeight: '600',
-    color: COLORS.flagshipDark,
-  },
+  // Divider styles
   divider: {
     height: 1,
     backgroundColor: COLORS.divider,
@@ -266,7 +579,7 @@ const styles = StyleSheet.create({
   appointmentDate: {
     fontSize: 20,
     fontWeight: '700',
-    color: COLORS.flagshipDark,
+    color: '#1E293B',
   },
   appointmentTime: {
     fontSize: 16,
@@ -275,44 +588,75 @@ const styles = StyleSheet.create({
   },
   observationsCard: {
     marginHorizontal: 16,
+    marginBottom: 16,
     padding: 20,
     borderRadius: 16,
     borderLeftWidth: 4,
     backgroundColor: COLORS.surface,
     elevation: 2,
-    shadowColor: COLORS.shadow,
+    shadowColor: COLORS.accent,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
   },
   observationHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     marginBottom: 16,
   },
   observationItem: {
     marginBottom: 12,
   },
   observationContent: {
-    backgroundColor: COLORS.surfaceAlt,
-    padding: 16,
-    borderRadius: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
-  observationDate: {
-    fontSize: 13,
-    color: COLORS.textSecondary,
-    marginBottom: 4,
-    letterSpacing: 0.2,
+  observationLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
   },
-  observationNote: {
-    fontSize: 15,
-    lineHeight: 22,
+  observationIcon: {
+    padding: 8,
+    borderRadius: 8,
+    marginRight: 12,
+  },
+  quickActionsContainer: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+  },
+  quickActionsTitle: {
+    fontSize: 18,
+    fontWeight: "600",
     color: COLORS.text,
-    letterSpacing: 0.3,
+    marginBottom: 16,
   },
-  itemDivider: {
-    height: 1,
-    backgroundColor: COLORS.divider,
-    marginVertical: 12,
+  quickActionsGrid: {
+    flexDirection: "row",
+    gap: 12,
   },
-});
+  quickActionButton: {
+    flex: 1,
+    backgroundColor: COLORS.surface,
+    padding: 20,
+    borderRadius: 16,
+    alignItems: "center",
+    elevation: 2,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  quickActionIcon: {
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 8,
+  },
+  quickActionText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: COLORS.text,
+    textAlign: "center",
+  },
+})

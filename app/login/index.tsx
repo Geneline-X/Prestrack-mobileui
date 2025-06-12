@@ -13,7 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Mail, Lock, Baby, Eye, EyeOff } from 'lucide-react-native';
 import apiService from '../../services/api';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 
 // Mock hospitals in Sierra Leone
 const facilities = [
@@ -64,30 +64,47 @@ export default function LoginScreen() {
     }
     setLoading(true);
     try {
-      const res = await apiService.login(username, password);
-      // Type assertion for expected AuthResponse
-      if ((res as any).resourceType === 'AuthResponse' && (res as any).accessToken) {
-        const token = (res as any).accessToken;
-        await AsyncStorage.setItem('auth_token', token);
-        apiService.setAuthToken(token);
-        const user = (res as any).user;
-        if (!user || !user.role) {
+      const response = await apiService.login(username, password);
+      console.log('Login response:', response);
+      
+      // Handle different response formats
+      const accessToken = response.accessToken || response.token;
+      const refreshToken = response.refreshToken;
+      const user = response.user || {};
+      
+      // Store user info including patientId
+      await SecureStore.setItemAsync('user_info', JSON.stringify(user));
+      
+      if (accessToken) {
+        // Store tokens securely
+        await Promise.all([
+          SecureStore.setItemAsync('auth_token', accessToken),
+          refreshToken ? SecureStore.setItemAsync('refresh_token', refreshToken) : Promise.resolve(),
+        ]);
+        
+        apiService.setAuthToken(accessToken);
+        
+        // Handle user role based routing
+        const userRole = user.role?.toLowerCase();
+        console.log('User role:', userRole);
+        
+        if (!userRole) {
           setError('User role not found. Please contact support.');
           return;
         }
-        if (user.role === 'super_admin' || user.role === 'facility_admin' || user.role === 'admin') {
-          await router.replace('/(admin)/dashboard');
-        } else if (user.role === 'patient') {
+        
+        // Redirect based on role
+        if (['super_admin', 'facility_admin', 'admin', 'patient'].includes(userRole)) {
           await router.replace('/(patient)/dashboard');
-        } else if (user.role === 'doctor' || user.role === 'nurse') {
+        } else if (['doctor', 'nurse'].includes(userRole)) {
           await router.replace('/(doctor)/dashboard');
         } else {
           setError('Unknown user role. Please contact support.');
         }
-      } else if ((res as any).resourceType === 'OperationOutcome' && Array.isArray((res as any).issue)) {
-        setError((res as any).issue[0]?.diagnostics || 'Login failed');
+      } else if ((response as any).resourceType === 'OperationOutcome' && Array.isArray((response as any).issue)) {
+        setError((response as any).issue[0]?.diagnostics || 'Login failed');
       } else {
-        setError((res as any).error || 'Invalid credentials');
+        setError((response as any).error || 'Invalid credentials');
       }
     } catch (e: any) {
       setError(e?.message || 'Login failed');
